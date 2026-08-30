@@ -216,8 +216,6 @@ function Today() {
       const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",body:JSON.stringify({date,title:title.trim(),calories:value})});
       const next=[...entries,saved];
       setEntries(next); setTitle(""); setCalories("");
-      const eaten=next.reduce((sum,item)=>sum+item.calories,0);
-      await jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten})}).catch(()=>{});
       refreshDay();
     }catch{}
     setBusy(false);
@@ -226,8 +224,6 @@ function Today() {
     const next=entries.filter(item=>item.id!==id);
     setEntries(next);
     await jsonFetch(`/api/food-entries?id=${encodeURIComponent(id)}`,{method:"DELETE"}).catch(()=>{});
-    const eaten=next.reduce((sum,item)=>sum+item.calories,0);
-    await jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten})}).catch(()=>{});
     refreshDay();
   }
   return <section className="screen slide-up">

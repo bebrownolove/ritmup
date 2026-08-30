@@ -25,6 +25,7 @@ export async function GET(request: Request) {
                             interval '1 day') as d(day)
       where not exists (select 1 from daily_logs l where l.user_id=$1 and l.log_date=d.day
                           and (l.calories_eaten > 0 or l.weight_kg is not null))
+        and not exists (select 1 from food_entries e where e.user_id=$1 and e.log_date=d.day)
         and not exists (select 1 from workouts w where w.user_id=$1 and w.log_date=d.day)
         and not exists (select 1 from streak_repairs r where r.user_id=$1 and r.log_date=d.day)
       order by d.day desc`, [user.id]);

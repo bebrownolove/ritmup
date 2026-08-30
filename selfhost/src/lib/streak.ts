@@ -27,6 +27,8 @@ export async function currentStreak(userId: string) {
         select to_char(log_date,'YYYY-MM-DD') as day from daily_logs
          where user_id=$1 and (calories_eaten > 0 or weight_kg is not null)
         union
+        select to_char(log_date,'YYYY-MM-DD') from food_entries where user_id=$1
+        union
         select to_char(log_date,'YYYY-MM-DD') from workouts where user_id=$1
         union
         select to_char(log_date,'YYYY-MM-DD') from streak_repairs where user_id=$1
