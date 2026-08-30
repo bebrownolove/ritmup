@@ -448,6 +448,10 @@ export function RitmApp() {
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
   if(onboarding==="loading"||onboardingUser!==userId)return <main className="loading"><div className="pulse">🔥</div></main>;
-  if(onboarding==="show")return <Onboarding onComplete={()=>setOnboarding("done")}/>;
+  if(onboarding==="show")return <Onboarding onComplete={()=>{
+    setOnboarding("done");
+    setTab("today");
+    void jsonFetch<{coins:number}>("/api/streak").then(result=>setHeaderCoins(result.coins)).catch(()=>{});
+  }}/>;
   return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><CoinsChip coins={headerCoins}/><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user} onOpenOnboarding={()=>setOnboarding("show")}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
 }

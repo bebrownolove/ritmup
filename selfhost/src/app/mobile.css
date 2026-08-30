@@ -154,7 +154,7 @@
 .result-orbit b { display:grid; place-items:center; width:84px; height:84px; border-radius:50%; background:#fff3d8; font-size:42px; animation: celebration 1.3s .3s both; }
 .result-orbit span { font-size:27px; animation: mascot-float 2s ease-in-out infinite; }
 .result-orbit span:last-child { animation-delay:.4s; }
-.result-lines { border:1px solid var(--line); border-radius:17px; padding:4px 15px; background:#f8faf6; text-align:left; }
+.result-lines { border:1px solid var(--line); border-radius:17px; padding:4px 15px; background:var(--surface-soft,#f8faf6); text-align:left; }
 .result-lines div { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
 .result-lines div:first-child { border-top:0; }
 .result-lines span { color:var(--muted); }
@@ -283,20 +283,21 @@
   --green-soft:#eef8ea;
   --warning-soft:#fff5e2;
   --danger-soft:#fdeeeb;
+  --track:#e9eee5;
 }
 :root[data-theme="light"] { color-scheme:light; }
 :root[data-theme="dark"] {
   color-scheme:dark;
   --ink:#edf5ef;--muted:#9aa99f;--green:#62d77b;--green-dark:#75e58c;
   --cream:#171c18;--card:#1b211d;--line:#303a32;--page:#101411;--chrome:#151a16f2;
-  --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;
+  --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;--track:#303a32;
 }
 @media(prefers-color-scheme:dark) {
   :root:not([data-theme="light"]) {
     color-scheme:dark;
     --ink:#edf5ef;--muted:#9aa99f;--green:#62d77b;--green-dark:#75e58c;
     --cream:#171c18;--card:#1b211d;--line:#303a32;--page:#101411;--chrome:#151a16f2;
-    --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;
+    --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;--track:#303a32;
   }
 }
 html,body,.loading { background:var(--page); }
@@ -308,6 +309,10 @@ html,body,.loading { background:var(--page); }
 .segmented button.active,.profile-group[open] summary { background:var(--surface-soft); color:var(--ink); }
 .auth-form input,.quick-add input,.search-card input,.body-form input,.body-form select,.weight-row input,.workout-add input,.goal-row input,.tz-row select,.onboarding-form input,.onboarding-form select { background:var(--input); color:var(--ink); }
 .ring:before { background:var(--card); }
+.ring { background:conic-gradient(var(--ring-color,var(--green)) var(--progress),var(--track) 0); }
+.ring small { display:block; white-space:nowrap; }
+.milestone-bar { background:var(--track); }
+.health-connect-state>span { background:var(--track); }
 .health-values div,.weight-history div,.calc-box,.bmi-box,.tz-row,.token-row,.setup-note { background:var(--surface-soft); }
 .privacy-note,.rank-row.me,.recalculate { background:var(--green-soft); color:var(--muted); }
 .streak,.coins-card,.milestone.done,.install-hint { background:var(--warning-soft); }
