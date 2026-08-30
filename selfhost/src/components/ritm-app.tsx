@@ -81,6 +81,7 @@ function Today() {
   const date=todayKey();
   const [entries,setEntries]=useState<Entry[]>([]); const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
   const [busy,setBusy]=useState(false);
+  const [weight,setWeight]=useState(""); const [weightBusy,setWeightBusy]=useState(false);
   const [health,setHealth]=useState<HealthSnapshot>({activeCalories:0,steps:null,weightKg:null});
   const [healthAvailable,setHealthAvailable]=useState(false); const [healthStatus,setHealthStatus]=useState(""); const [healthBusy,setHealthBusy]=useState(false);
   const goal=2000; const total=entries.reduce((sum,item)=>sum+item.calories,0); const percent=Math.min(100,Math.round(total/goal*100));
@@ -102,6 +103,18 @@ function Today() {
     detect();window.addEventListener("ritm-healthkit-ready",detect);window.addEventListener("ritm-health-data",receive);
     return()=>{window.removeEventListener("ritm-healthkit-ready",detect);window.removeEventListener("ritm-health-data",receive);};
   },[date]);
+  async function saveWeight(event:FormEvent){
+    event.preventDefault();
+    const value=Number(weight.replace(",","."));
+    if(!value||value<20||value>400){setHealthStatus("Вес должен быть от 20 до 400 кг");return;}
+    setWeightBusy(true);
+    try{
+      const saved=await jsonFetch<HealthSnapshot>("/api/daily-log",{method:"POST",body:JSON.stringify({date,weightKg:value})});
+      setHealth(current=>({...current,weightKg:saved.weightKg}));
+      setWeight(""); setHealthStatus("Вес сохранён ✓");
+    }catch{setHealthStatus("Не удалось сохранить вес");}
+    setWeightBusy(false);
+  }
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
   async function add(event:FormEvent){
     event.preventDefault();
@@ -129,6 +142,10 @@ function Today() {
     <div className="health-card">
       <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
       <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.weightKg?health.weightKg.toFixed(1):"—"}</b><small>вес, кг</small></div></div>
+      <form className="weight-row" onSubmit={saveWeight}>
+        <label>Вес сегодня<input value={weight} onChange={e=>setWeight(e.target.value)} type="number" inputMode="decimal" step="0.1" min="20" max="400" placeholder={health.weightKg?health.weightKg.toFixed(1):"например, 61.4"}/></label>
+        <button disabled={weightBusy||!weight}>{weightBusy?"…":"Сохранить"}</button>
+      </form>
       {healthAvailable&&<button className="health-sync" onClick={syncHealth} disabled={healthBusy}>{healthBusy?"Синхронизация…":"Обновить из Apple Health"}</button>}
       {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Данные с iPhone подключаются за пару минут — в профиле, разделом ниже.</p>}
       {healthStatus&&<small className="health-status">{healthStatus}</small>}
