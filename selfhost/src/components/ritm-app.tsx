@@ -15,7 +15,7 @@ type Workout = { id:string; title:string; minutes:number; calories:number|null; 
 type AppUser = { id:string; name:string; email:string; username?:string|null };
 type HealthSnapshot = { calorieGoal?:number; activeCalories:number; steps?:number|null; exerciseMinutes?:number|null; weightKg:number|null; healthSyncedAt?:string|null };
 type HealthToken = { token:string; lastUsedAt:string|null };
-type HealthKitDetail = { date?:string; activeCalories?:number; weightKg?:number|null; error?:string };
+type HealthKitDetail = { date?:string; activeCalories?:number; steps?:number; exerciseMinutes?:number; weightKg?:number|null; error?:string };
 
 declare global {
   interface Window {
@@ -198,9 +198,10 @@ function Today() {
     const receive=(event:Event)=>{void (async()=>{
       const detail=(event as CustomEvent<HealthKitDetail>).detail;
       if(detail.error){setHealthStatus(detail.error);setHealthBusy(false);return;}
-      if(typeof detail.activeCalories!=="number"){setHealthStatus("Apple Health не вернул данные");setHealthBusy(false);return;}
+      const hasMetric=[detail.activeCalories,detail.steps,detail.exerciseMinutes,detail.weightKg].some(value=>typeof value==="number");
+      if(!hasMetric){setHealthStatus("Apple Health не вернул данные");setHealthBusy(false);return;}
       try{
-        const saved=await jsonFetch<HealthSnapshot&{ok:true}>("/api/health-sync",{method:"POST",body:JSON.stringify({date:detail.date??date,activeCalories:detail.activeCalories,weightKg:detail.weightKg??null})});
+        const saved=await jsonFetch<HealthSnapshot&{ok:true}>("/api/health-sync",{method:"POST",body:JSON.stringify({date:detail.date??date,activeCalories:detail.activeCalories,steps:detail.steps,exerciseMinutes:detail.exerciseMinutes,weightKg:detail.weightKg??null})});
         setHealth(saved);setHealthStatus("Синхронизировано ✓");
       }catch{setHealthStatus("Не удалось сохранить данные");}finally{setHealthBusy(false);}
     })();};
