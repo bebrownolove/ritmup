@@ -77,14 +77,16 @@ function AuthScreen() {
   </main>;
 }
 
-function Today({userId}:{userId:string}) {
-  const date=todayKey(); const key=`ritm-entries-${userId}-${date}`;
+function Today() {
+  const date=todayKey();
   const [entries,setEntries]=useState<Entry[]>([]); const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
+  const [busy,setBusy]=useState(false);
   const [health,setHealth]=useState<HealthSnapshot>({activeCalories:0,steps:null,weightKg:null});
   const [healthAvailable,setHealthAvailable]=useState(false); const [healthStatus,setHealthStatus]=useState(""); const [healthBusy,setHealthBusy]=useState(false);
   const goal=2000; const total=entries.reduce((sum,item)=>sum+item.calories,0); const percent=Math.min(100,Math.round(total/goal*100));
-  useEffect(()=>{void Promise.resolve().then(()=>{try{setEntries(JSON.parse(localStorage.getItem(key)??"[]"));}catch{}});},[key]);
-  useEffect(()=>{localStorage.setItem(key,JSON.stringify(entries)); if(entries.length) void jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:total,calorieGoal:goal,streak:1})}).catch(()=>{});},[date,entries,key,total]);
+  // Записи живут на сервере. В localStorage их держать нельзя: при уходе со вкладки
+  // компонент размонтируется, и сохранение пустого списка затирало данные.
+  useEffect(()=>{void jsonFetch<Entry[]>(`/api/food-entries?date=${date}`).then(setEntries).catch(()=>{});},[date]);
   useEffect(()=>{void jsonFetch<HealthSnapshot>(`/api/daily-log?date=${date}`).then(setHealth).catch(()=>{});},[date]);
   useEffect(()=>{
     const detect=()=>setHealthAvailable(Boolean(window.ritmHealthKitAvailable&&window.webkit?.messageHandlers?.ritmHealth));
@@ -101,10 +103,29 @@ function Today({userId}:{userId:string}) {
     return()=>{window.removeEventListener("ritm-healthkit-ready",detect);window.removeEventListener("ritm-health-data",receive);};
   },[date]);
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
-  function add(event:FormEvent){event.preventDefault(); const value=Number(calories); if(!title.trim()||!value)return; setEntries(v=>[...v,{id:crypto.randomUUID(),title:title.trim(),calories:value}]);setTitle("");setCalories("");}
+  async function add(event:FormEvent){
+    event.preventDefault();
+    const value=Number(calories); if(!title.trim()||!value||busy)return;
+    setBusy(true);
+    try{
+      const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",body:JSON.stringify({date,title:title.trim(),calories:value})});
+      const next=[...entries,saved];
+      setEntries(next); setTitle(""); setCalories("");
+      const eaten=next.reduce((sum,item)=>sum+item.calories,0);
+      void jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten,calorieGoal:goal,streak:1})}).catch(()=>{});
+    }catch{}
+    setBusy(false);
+  }
+  async function remove(id:string){
+    const next=entries.filter(item=>item.id!==id);
+    setEntries(next);
+    await jsonFetch(`/api/food-entries?id=${encodeURIComponent(id)}`,{method:"DELETE"}).catch(()=>{});
+    const eaten=next.reduce((sum,item)=>sum+item.calories,0);
+    void jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten,calorieGoal:goal,streak:next.length?1:0})}).catch(()=>{});
+  }
   return <section className="screen slide-up">
     <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div><div className="streak"><span>🔥</span><b>{entries.length?1:0}</b><small>дней</small></div></div>
-    <div className="progress-card"><div className="ring" style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{percent<50?"Отличное начало":percent<90?"Уже близко":"Цель дня рядом!"}</h3><p>Добавляй еду по мере дня. Ничего подтверждать вечером не нужно.</p></div></div>
+    <div className="progress-card"><div className="ring" style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{total>goal?"Цель дня превышена":percent<50?"Отличное начало":percent<90?"Уже близко":"Цель дня рядом!"}</h3><p>Добавляй еду по мере дня. Ничего подтверждать вечером не нужно.</p></div></div>
     <div className="health-card">
       <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
       <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.weightKg?health.weightKg.toFixed(1):"—"}</b><small>вес, кг</small></div></div>
@@ -112,8 +133,8 @@ function Today({userId}:{userId:string}) {
       {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Данные с iPhone подключаются за пару минут — в профиле, разделом ниже.</p>}
       {healthStatus&&<small className="health-status">{healthStatus}</small>}
     </div>
-    <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary">Добавить</button></form>
-    <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>setEntries(v=>v.filter(x=>x.id!==item.id))}>×</button></div>)}</div>
+    <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
+    <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
   </section>;
 }
 
@@ -244,5 +265,5 @@ export function RitmApp() {
   },[userId]);
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
-  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today userId={user.id}/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
+  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
 }
