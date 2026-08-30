@@ -13,6 +13,14 @@ async function fetchJson<T>(url:string):Promise<T> {
   return response.json();
 }
 
+function plural(count:number, one:string, few:string, many:string) {
+  const tens=count%100, units=count%10;
+  if(tens>10&&tens<20) return many;
+  if(units===1) return one;
+  if(units>=2&&units<=4) return few;
+  return many;
+}
+
 function shortDate(date:string) {
   return new Date(`${date}T00:00`).toLocaleDateString("ru",{day:"numeric",month:"short"});
 }
@@ -73,10 +81,10 @@ export function StatsScreen() {
     </div>
 
     <div className="stat-grid">
-      <div><b>{logged.length}</b><small>дней с записями</small></div>
+      <div><b>{logged.length}</b><small>{plural(logged.length,"день","дня","дней")} с записями</small></div>
       <div><b>{averageEaten||"—"}</b><small>ккал в среднем</small></div>
-      <div><b>{logged.length?`${withinGoal}/${logged.length}`:"—"}</b><small>дней в норме</small></div>
-      <div><b>{minutes}</b><small>минут тренировок</small></div>
+      <div><b>{logged.length?`${withinGoal}/${logged.length}`:"—"}</b><small>{plural(withinGoal,"день","дня","дней")} в норме</small></div>
+      <div><b>{minutes}</b><small>{plural(minutes,"минута","минуты","минут")} тренировок</small></div>
     </div>
 
     <div className="list-card">
