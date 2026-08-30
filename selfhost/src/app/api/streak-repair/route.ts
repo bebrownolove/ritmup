@@ -10,12 +10,19 @@ const schema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 export async function GET(request: Request) {
   const user = await requireUser(request);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  // Отсчёт идёт не глубже дня регистрации: до него пропускать было нечего.
   const result = await db.query<{ date: string }>(
-    `select to_char(d.day,'YYYY-MM-DD') as date
-       from generate_series(
-              (now() at time zone coalesce((select timezone from profiles where user_id=$1),'UTC'))::date - 14,
-              (now() at time zone coalesce((select timezone from profiles where user_id=$1),'UTC'))::date - 1,
-              interval '1 day') as d(day)
+    `with zone as (select coalesce(timezone,'UTC') as tz from profiles where user_id=$1),
+          bounds as (
+            select greatest(
+                     ((now() at time zone (select tz from zone))::date - 14),
+                     ((select "createdAt" from "user" where id=$1) at time zone (select tz from zone))::date
+                   ) as first_day,
+                   (now() at time zone (select tz from zone))::date - 1 as last_day)
+     select to_char(d.day,'YYYY-MM-DD') as date
+       from generate_series((select first_day from bounds),
+                            (select last_day from bounds),
+                            interval '1 day') as d(day)
       where not exists (select 1 from daily_logs l where l.user_id=$1 and l.log_date=d.day
                           and (l.calories_eaten > 0 or l.weight_kg is not null))
         and not exists (select 1 from workouts w where w.user_id=$1 and w.log_date=d.day)
@@ -32,6 +39,13 @@ export async function POST(request: Request) {
   const day = parsed.data.date;
   const today = await todayFor(user.id);
   if (day >= today) return Response.json({ error: "not_a_past_day" }, { status: 400 });
+  const window = await db.query<{ firstDay: string }>(
+    `select to_char(greatest(
+              ((now() at time zone coalesce(p.timezone,'UTC'))::date - 14),
+              (u."createdAt" at time zone coalesce(p.timezone,'UTC'))::date),'YYYY-MM-DD') as "firstDay"
+       from "user" u left join profiles p on p.user_id=u.id where u.id=$1`, [user.id]);
+  if (day < (window.rows[0]?.firstDay ?? day))
+    return Response.json({ error: "outside_window" }, { status: 400 });
 
   // Списываем только при достаточном балансе — условие в самом UPDATE,
   // чтобы два одновременных запроса не увели баланс в минус.
