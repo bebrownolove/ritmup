@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { currentStreak, publishStreak } from "@/lib/streak";
+import { awardDay } from "@/lib/coins";
 
 const dateSchema=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 // Всё, кроме даты, необязательно: экран может прислать один только вес,
@@ -48,6 +49,7 @@ export async function POST(request:Request) {
       weight_kg::float8 as "weightKg", health_synced_at as "healthSyncedAt"`,
     [user.id,l.date,l.caloriesEaten??null,l.activeCalories??null,l.calorieGoal??null,l.weightKg??null]);
   // Серию считает сервер: клиент раньше присылал единицу независимо от истории.
+  await awardDay(user.id,l.date);
   const streak=await currentStreak(user.id);
   await publishStreak(user.id,l.date,streak);
   return Response.json({ok:true,streak,...result.rows[0]});

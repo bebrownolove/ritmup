@@ -16,7 +16,8 @@ function shift(date: string, days: number) {
 }
 
 /**
- * Сколько дней подряд человек что-то отмечал: еду, вес или тренировку.
+ * Сколько дней подряд человек что-то отмечал: еду, вес, тренировку
+ * или выкупленный за монеты день.
  * Серия жива, если последняя отметка была сегодня или вчера — иначе она прервалась.
  */
 export async function currentStreak(userId: string) {
@@ -27,6 +28,8 @@ export async function currentStreak(userId: string) {
          where user_id=$1 and (calories_eaten > 0 or weight_kg is not null)
         union
         select to_char(log_date,'YYYY-MM-DD') from workouts where user_id=$1
+        union
+        select to_char(log_date,'YYYY-MM-DD') from streak_repairs where user_id=$1
       ) marked order by day desc limit 400`, [userId]);
   const days = new Set(result.rows.map(row => row.day));
   let cursor = days.has(today) ? today : shift(today, -1);

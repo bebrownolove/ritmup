@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { currentStreak, publishStreak } from "@/lib/streak";
+import { awardDay } from "@/lib/coins";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const createSchema = z.object({
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
      select $1,$2,'workout','friends',jsonb_build_object('minutes',$3::int)
       where exists(select 1 from profiles where user_id=$1 and share_workouts=true)
      on conflict(user_id,event_key) do nothing`, [user.id, `workout:${id}`, workout.minutes]);
+  await awardDay(user.id, workout.date);
   await publishStreak(user.id, workout.date, await currentStreak(user.id));
   return Response.json({ id, ...workout });
 }
