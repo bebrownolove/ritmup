@@ -40,13 +40,18 @@ function AuthScreen() {
   async function submit(event:FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     const data=new FormData(event.currentTarget);
-    const email=String(data.get("email")); const password=String(data.get("password"));
+    const password=String(data.get("password"));
     if(mode==="signup") {
-      const result=await authClient.signUp.email({email,password,name:String(data.get("name")),username:String(data.get("username"))});
+      const result=await authClient.signUp.email({email:String(data.get("email")),password,
+        name:String(data.get("name")),username:String(data.get("username"))});
       if(result.error) setError(result.error.message??"Не получилось создать аккаунт");
     } else {
-      const result=await authClient.signIn.email({email,password});
-      if(result.error) setError(result.error.message??"Неверная почта или пароль");
+      // Поле одно на оба случая: с «собакой» считаем почтой, без неё — ником.
+      const login=String(data.get("login")).trim();
+      const result=login.includes("@")
+        ? await authClient.signIn.email({email:login,password})
+        : await authClient.signIn.username({username:login,password});
+      if(result.error) setError(result.error.message??"Неверный ник, почта или пароль");
     }
     setBusy(false);
   }
@@ -57,14 +62,17 @@ function AuthScreen() {
       <p className="muted">Питание, движение и серия дней — просто и без рекламы.</p>
       <div className="segmented"><button className={mode==="signup"?"active":""} onClick={()=>setMode("signup")}>Регистрация</button><button className={mode==="signin"?"active":""} onClick={()=>setMode("signin")}>Войти</button></div>
       <form onSubmit={submit} className="auth-form">
-        {mode==="signup"&&<><label>Как тебя зовут<input name="name" required maxLength={60} placeholder="Лиза"/></label><label>Уникальный ник<input name="username" required minLength={3} maxLength={24} pattern="[A-Za-z0-9_.]+" placeholder="liza.moves"/></label></>}
-        <label>Почта<input name="email" type="email" required placeholder="you@example.com"/></label>
-        <label>Пароль<input name="password" type="password" required minLength={8} placeholder="Минимум 8 символов"/></label>
+        {mode==="signup"
+          ? <><label>Как тебя зовут<input name="name" required maxLength={60} autoComplete="name" placeholder="Лиза"/></label>
+              <label>Уникальный ник<input name="username" required minLength={3} maxLength={24} pattern="[A-Za-z0-9_.]+" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="liza.moves"/></label>
+              <label>Почта<input name="email" type="email" required autoComplete="email" placeholder="you@example.com"/></label></>
+          : <label>Ник или почта<input name="login" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="liza.moves"/></label>}
+        <label>Пароль<input name="password" type="password" required minLength={8} autoComplete={mode==="signup"?"new-password":"current-password"} placeholder="Минимум 8 символов"/></label>
         {error&&<p className="error">{error}</p>}
         <button className="primary" disabled={busy}>{busy?"Секунду…":mode==="signup"?"Создать аккаунт":"Войти"}</button>
       </form>
       {googleEnabled&&<button className="google" onClick={()=>authClient.signIn.social({provider:"google",callbackURL:"/"})}>G&nbsp;&nbsp; Продолжить с Google</button>}
-      <p className="fineprint">{googleEnabled?"Можно войти через Google или по почте.":"Вход по почте и паролю. Google подключим позже."}</p>
+      <p className="fineprint">{googleEnabled?"Можно войти через Google или по почте.":"Входить можно по нику или по почте. Google подключим позже."}</p>
     </section>
   </main>;
 }
