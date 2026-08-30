@@ -5,8 +5,10 @@ import { authClient } from "@/lib/auth-client";
 
 type Tab = "today" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; relationship?:string; status?:string; sentByMe?:boolean };
-type FeedEvent = { id:number; type:string; payload:{days?:number}; createdAt:string; name:string; username?:string };
+type FeedEvent = { id:number; type:string; payload:{days?:number;minutes?:number}; createdAt:string; name:string; username?:string };
 type Entry = { id:string; title:string; calories:number };
+type WeightPoint = { date:string; weightKg:number };
+type Workout = { id:string; title:string; minutes:number; calories:number|null; date:string };
 type AppUser = { id:string; name:string; email:string; username?:string|null };
 type HealthSnapshot = { activeCalories:number; steps?:number|null; exerciseMinutes?:number|null; weightKg:number|null; healthSyncedAt?:string|null };
 type HealthToken = { token:string; lastUsedAt:string|null };
@@ -77,11 +79,91 @@ function AuthScreen() {
   </main>;
 }
 
+function Sparkline({points}:{points:WeightPoint[]}) {
+  if(points.length<2) return null;
+  const values=points.map(p=>p.weightKg);
+  const min=Math.min(...values), max=Math.max(...values), span=max-min||1;
+  const step=100/(points.length-1);
+  const path=values.map((v,i)=>`${i?"L":"M"}${(i*step).toFixed(2)},${(28-((v-min)/span)*24).toFixed(2)}`).join(" ");
+  return <svg className="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
+    <path d={path} fill="none" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
+  </svg>;
+}
+
+function WeightCard({date}:{date:string}) {
+  const [history,setHistory]=useState<WeightPoint[]>([]);
+  const [value,setValue]=useState(""); const [busy,setBusy]=useState(false); const [note,setNote]=useState("");
+  const load=()=>jsonFetch<WeightPoint[]>("/api/weight").then(setHistory).catch(()=>{});
+  useEffect(()=>{void load();},[date]);
+  const today=history.find(point=>point.date===date);
+  const earlier=history.filter(point=>point.date!==date);
+  const previous=earlier.length?earlier[earlier.length-1]:undefined;
+  const shown=today??previous;
+  const delta=today&&previous?today.weightKg-previous.weightKg:null;
+  async function save(event:FormEvent){
+    event.preventDefault();
+    const kilograms=Number(value.replace(",","."));
+    if(!kilograms||kilograms<20||kilograms>400){setNote("Вес должен быть от 20 до 400 кг");return;}
+    setBusy(true);
+    try{ await jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,weightKg:kilograms})});
+      setValue(""); setNote(today?"Вес обновлён ✓":"Записано ✓"); await load();
+    }catch{setNote("Не удалось сохранить");}
+    setBusy(false); setTimeout(()=>setNote(""),1800);
+  }
+  return <div className="weight-card">
+    <div className="weight-head">
+      <div><p className="eyebrow">ВЕС</p><b>{shown?`${shown.weightKg.toFixed(1)} кг`:"—"}</b>
+        {delta!==null&&<em className={delta<0?"down":delta>0?"up":""}>{delta>0?"+":""}{delta.toFixed(1)} кг с прошлого раза</em>}
+        {!today&&<em className="hint">Сегодня ещё не записан</em>}
+      </div>
+      <Sparkline points={history.slice(-14)}/>
+    </div>
+    <form className="weight-row" onSubmit={save}>
+      <input value={value} onChange={event=>setValue(event.target.value)} type="number" inputMode="decimal" step="0.1" min="20" max="400" placeholder={today?"Исправить":"Утренний вес, кг"}/>
+      <button className="primary" disabled={busy||!value}>{busy?"…":today?"Обновить":"Записать"}</button>
+    </form>
+    {note&&<small className="health-status">{note}</small>}
+    {earlier.length>0&&<div className="weight-history">{history.slice(-7).reverse().map(point=>
+      <div key={point.date}><span>{new Date(`${point.date}T00:00`).toLocaleDateString("ru",{day:"numeric",month:"short"})}</span><b>{point.weightKg.toFixed(1)}</b></div>)}</div>}
+  </div>;
+}
+
+function WorkoutsCard({date}:{date:string}) {
+  const [items,setItems]=useState<Workout[]>([]);
+  const [title,setTitle]=useState(""); const [minutes,setMinutes]=useState(""); const [busy,setBusy]=useState(false);
+  useEffect(()=>{void jsonFetch<Workout[]>(`/api/workouts?date=${date}`).then(setItems).catch(()=>{});},[date]);
+  async function add(event:FormEvent){
+    event.preventDefault();
+    const length=Number(minutes);
+    if(!title.trim()||!length||busy)return;
+    setBusy(true);
+    try{ const saved=await jsonFetch<Workout>("/api/workouts",{method:"POST",body:JSON.stringify({date,title:title.trim(),minutes:length})});
+      setItems(current=>[...current,saved]); setTitle(""); setMinutes("");
+    }catch{}
+    setBusy(false);
+  }
+  async function remove(id:string){
+    setItems(current=>current.filter(item=>item.id!==id));
+    await jsonFetch(`/api/workouts?id=${encodeURIComponent(id)}`,{method:"DELETE"}).catch(()=>{});
+  }
+  const total=items.reduce((sum,item)=>sum+item.minutes,0);
+  return <div className="list-card">
+    <h3>Тренировки{total>0&&<small> · {total} мин</small>}</h3>
+    <form className="workout-add" onSubmit={add}>
+      <input value={title} onChange={event=>setTitle(event.target.value)} maxLength={80} placeholder="Что делал? Например, зал — ноги"/>
+      <input value={minutes} onChange={event=>setMinutes(event.target.value)} type="number" min="1" max="1440" placeholder="мин"/>
+      <button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button>
+    </form>
+    {items.length===0
+      ? <div className="empty"><span>🏋️</span><p>Запиши тренировку, когда она случится</p></div>
+      : items.map(item=><div className="entry" key={item.id}><span>🏋️</span><b>{item.title}</b><em>{item.minutes} мин</em><button onClick={()=>void remove(item.id)}>×</button></div>)}
+  </div>;
+}
+
 function Today() {
   const date=todayKey();
   const [entries,setEntries]=useState<Entry[]>([]); const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
   const [busy,setBusy]=useState(false);
-  const [weight,setWeight]=useState(""); const [weightBusy,setWeightBusy]=useState(false);
   const [health,setHealth]=useState<HealthSnapshot>({activeCalories:0,steps:null,weightKg:null});
   const [healthAvailable,setHealthAvailable]=useState(false); const [healthStatus,setHealthStatus]=useState(""); const [healthBusy,setHealthBusy]=useState(false);
   const goal=2000; const total=entries.reduce((sum,item)=>sum+item.calories,0); const percent=Math.min(100,Math.round(total/goal*100));
@@ -103,18 +185,6 @@ function Today() {
     detect();window.addEventListener("ritm-healthkit-ready",detect);window.addEventListener("ritm-health-data",receive);
     return()=>{window.removeEventListener("ritm-healthkit-ready",detect);window.removeEventListener("ritm-health-data",receive);};
   },[date]);
-  async function saveWeight(event:FormEvent){
-    event.preventDefault();
-    const value=Number(weight.replace(",","."));
-    if(!value||value<20||value>400){setHealthStatus("Вес должен быть от 20 до 400 кг");return;}
-    setWeightBusy(true);
-    try{
-      const saved=await jsonFetch<HealthSnapshot>("/api/daily-log",{method:"POST",body:JSON.stringify({date,weightKg:value})});
-      setHealth(current=>({...current,weightKg:saved.weightKg}));
-      setWeight(""); setHealthStatus("Вес сохранён ✓");
-    }catch{setHealthStatus("Не удалось сохранить вес");}
-    setWeightBusy(false);
-  }
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
   async function add(event:FormEvent){
     event.preventDefault();
@@ -142,15 +212,13 @@ function Today() {
     <div className="health-card">
       <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
       <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.weightKg?health.weightKg.toFixed(1):"—"}</b><small>вес, кг</small></div></div>
-      <form className="weight-row" onSubmit={saveWeight}>
-        <label>Вес сегодня<input value={weight} onChange={e=>setWeight(e.target.value)} type="number" inputMode="decimal" step="0.1" min="20" max="400" placeholder={health.weightKg?health.weightKg.toFixed(1):"например, 61.4"}/></label>
-        <button disabled={weightBusy||!weight}>{weightBusy?"…":"Сохранить"}</button>
-      </form>
       {healthAvailable&&<button className="health-sync" onClick={syncHealth} disabled={healthBusy}>{healthBusy?"Синхронизация…":"Обновить из Apple Health"}</button>}
       {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Данные с iPhone подключаются за пару минут — в профиле, разделом ниже.</p>}
       {healthStatus&&<small className="health-status">{healthStatus}</small>}
     </div>
+    <WeightCard date={date}/>
     <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
+    <WorkoutsCard date={date}/>
     <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
   </section>;
 }
@@ -167,7 +235,7 @@ function Friends() {
     <div className="search-card"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Найти по нику или имени"/>{notice&&<small>{notice}</small>}{results.map(person=><PersonRow key={person.id} person={person} action={person.relationship==="none"?<button onClick={()=>request(person.id)}>Добавить</button>:<span className="status">{person.relationship==="friends"?"Уже друзья":"Заявка отправлена"}</span>}/>)}</div>
     {incoming.length>0&&<div className="list-card"><h3>Заявки</h3>{incoming.map(p=><PersonRow key={p.id} person={p} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
     <div className="list-card"><h3>Твои друзья · {accepted.length}</h3>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
-    <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>🔥</span><p><b>{event.name}</b> держит серию уже {event.payload.days??1} дн.</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся безопасные достижения друзей</p></div>}</div>
+    <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> тренировался {event.payload.minutes??0} мин</>:<><b>{event.name}</b> держит серию уже {event.payload.days??1} дн.</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся безопасные достижения друзей</p></div>}</div>
   </section>;
 }
 
