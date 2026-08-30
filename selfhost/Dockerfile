@@ -7,7 +7,12 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* вшиваются в клиентский бандл на этапе сборки, а .env исключён
+# из контекста (.dockerignore). Поэтому их приходится передавать build-аргументами:
+# без этого в браузер уедет undefined.
+ARG NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=false
+ARG NEXT_PUBLIC_HEALTH_SHORTCUT_URL=
+ENV NEXT_TELEMETRY_DISABLED=1     NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=$NEXT_PUBLIC_GOOGLE_AUTH_ENABLED     NEXT_PUBLIC_HEALTH_SHORTCUT_URL=$NEXT_PUBLIC_HEALTH_SHORTCUT_URL
 RUN npm run build
 
 FROM node:22-alpine AS runner

@@ -65,6 +65,10 @@ https://ДОМЕН/api/auth/callback/google
 
 Затем заполнить `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, поставить `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true` и пересобрать приложение.
 
+Важно: любые переменные `NEXT_PUBLIC_*` попадают в браузерный бандл на этапе сборки,
+а `.env` исключён из контекста Docker. Они передаются build-аргументами из `compose.yaml`,
+поэтому после их изменения нужен именно `docker compose up -d --build`, а не перезапуск.
+
 ## Установка на телефон
 
 Приложение — PWA: с домашнего экрана оно открывается без адресной строки Safari,
