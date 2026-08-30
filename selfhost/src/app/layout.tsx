@@ -6,7 +6,9 @@ export const metadata: Metadata = {
   title: "Ритм — дневник питания и привычек",
   description: "Простой дневник калорий, веса, серий и активности с друзьями.",
   applicationName: "Ритм",
-  appleWebApp: { capable: true, title: "Ритм", statusBarStyle: "default" },
+  // black-translucent — единственный режим, при котором контент уходит под статус-бар.
+  // При "default" iOS резервирует полоску сверху и красит её чёрным.
+  appleWebApp: { capable: true, title: "Ритм", statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
   icons: { icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }], apple: "/apple-touch-icon.png" },
 };
