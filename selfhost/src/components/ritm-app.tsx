@@ -5,6 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
 import { CoinsChip, Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
+import { Onboarding } from "@/components/onboarding";
 
 type Tab = "today" | "stats" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; relationship?:string; status?:string; sentByMe?:boolean };
@@ -186,6 +187,9 @@ function Today() {
   const percent=Math.min(100,Math.round(ratio*100));
   // Цель здесь — предел, а не достижение: перебор не должен выглядеть победой.
   const ringState=ratio>1?"over":ratio>=0.9?"close":"ok";
+  const healthFreshness=health.healthSyncedAt
+    ? `Обновлено в ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})} ✓`
+    : "Пока не подключено";
   // Записи живут на сервере. В localStorage их держать нельзя: при уходе со вкладки
   // компонент размонтируется, и сохранение пустого списка затирало данные.
   useEffect(()=>{void jsonFetch<Entry[]>(`/api/food-entries?date=${date}`).then(setEntries).catch(()=>{});},[date]);
@@ -244,10 +248,11 @@ function Today() {
     </div>}
     {section==="movement"&&<div className="day-panel slide-up">
       <div className="health-card">
-        <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
+        <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p className={health.healthSyncedAt?"health-fresh":""}>{healthFreshness}</p></div></div>
         <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.exerciseMinutes??"—"}</b><small>минут</small></div></div>
         {healthAvailable&&<button className="health-sync" onClick={syncHealth} disabled={healthBusy}>{healthBusy?"Синхронизация…":"Обновить из Apple Health"}</button>}
-        {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Подключение находится в профиле → Apple Health.</p>}
+        {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Подключение находится в профиле → Apple Health. Настрой несколько обновлений в течение дня.</p>}
+        {!healthAvailable&&health.healthSyncedAt&&<p className="health-hint">Для новых чисел запусти команду «Ритм» или дождись ближайшей автоматизации.</p>}
         {healthStatus&&<small className="health-status">{healthStatus}</small>}
       </div>
       <WorkoutsCard date={date}/>
@@ -346,14 +351,14 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
     {!embedded&&<h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>}
     {embedded&&token?.lastUsedAt&&<small className="save-note">Работает ✓</small>}
     <TimezoneRow/>
-    <p className="muted">Сайт сам читать Apple Health не может — это запрещено в iOS. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone: раз в день, автоматически.</p>
+    <p className="muted">PWA не может читать Apple Health в фоне. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone — вручную или несколько раз в день автоматически.</p>
     {shortcutUrl
       ? <><a className="shortcut-cta" href={shortcutUrl} target="_blank" rel="noreferrer">Добавить готовую команду</a>
           <ol className="setup-steps">
             <li>Открой ссылку выше <b>на iPhone</b> и нажми <b>«Добавить команду»</b>.</li>
             <li>В добавленной команде найди заголовок <b>Authorization</b> и вставь туда свой ключ из поля ниже — целиком, вместе со словом <b>Bearer</b>.</li>
             <li>Запусти команду кнопкой <b>▶</b>. iOS спросит доступ к Здоровью и разрешение на отправку — отвечай <b>«Разрешать всегда»</b>, иначе ночью команда будет ждать подтверждения.</li>
-            <li>На вкладке <b>«Автоматизация»</b> создай <b>«Время суток»</b> на <b>23:50</b>, ежедневно, выбери эту команду и включи <b>«Немедленный запуск»</b>.</li>
+            <li>На вкладке <b>«Автоматизация»</b> создай <b>«Время суток»</b>, выбери эту команду и включи <b>«Немедленный запуск»</b>. Повтори для <b>08:00, 12:00, 16:00, 20:00 и 23:50</b> — тогда цифры будут обновляться весь день.</li>
           </ol></>
       : null}
     <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть":shortcutUrl?"Собрать команду вручную":"Показать инструкцию"}</button>
@@ -364,7 +369,7 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
       <li>Добавь <b>вторую такую же</b> через поиск действий, с типом <b>Steps</b> («Шаги»). <b>Не дублируй первую</b>: копия встаёт следом, подхватывает её результат себе на вход и превращается в «Отфильтровать» — тогда она ищет шаги среди калорий и возвращает пустоту. Если такое случилось, нажми на синюю плашку сразу после слова «Отфильтровать» и выбери <b>«Очистить»</b>.</li>
       <li>Добавь <b>«Получить содержимое URL»</b> (Get Contents of URL). Вставь адрес из поля ниже, разверни <b>«Показать больше»</b>, поставь <b>Метод POST</b>, добавь заголовок <b>Authorization</b> со своим ключом и выбери <b>Тело запроса — JSON</b>.</li>
       <li>Добавь два поля типа <b>Число</b>: <code>activeCalories</code> и <code>steps</code>. В значение каждого подставь переменную через <b>«Выбрать переменную»</b> — там будет два пункта «Данные Здоровья», первый от карточки с энергией, второй от карточки с шагами. Стоящий в поле <b>ноль сначала сотри</b>, иначе он приклеится к числу.</li>
-      <li>Нажми <b>▶</b>. Сервер должен ответить <code>{"{"}&quot;ok&quot;:true{"}"}</code> с твоими числами. Дальше — автоматизация на 23:50, как в пункте 4 выше.</li>
+      <li>Нажми <b>▶</b>. Сервер должен ответить <code>{"{"}&quot;ok&quot;:true{"}"}</code> с твоими числами. Затем создай автоматизации на <b>08:00, 12:00, 16:00, 20:00 и 23:50</b> с немедленным запуском.</li>
     </ol></>}
     <p className="setup-note">Дату присылать не нужно — сервер знает твой часовой пояс и сам поймёт, за какой день числа. Активную энергию пишут в основном Apple Watch; без часов она будет почти нулевой, а шаги телефон считает сам.</p>
     <div className="token-row"><div><small>Адрес</small><code>{endpoint}</code></div><button onClick={()=>copy(endpoint,"Адрес")}>Копировать</button></div>
@@ -375,13 +380,13 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
   </div>;
 }
 
-function Profile({user}:{user:{name:string;email:string;username?:string|null}}) {
+function Profile({user,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};onOpenOnboarding:()=>void}) {
   const [settings,setSettings]=useState({isDiscoverable:true,shareStreak:true,shareGoalHits:true,shareWorkouts:true}); const [saved,setSaved]=useState(false);
   useEffect(()=>{jsonFetch<typeof settings>("/api/profile").then(v=>setSettings(s=>({...s,...v})));},[]);
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
   return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><div className="big-avatar">{user.name.slice(0,1).toUpperCase()}</div><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
     <div className="profile-menu">
-      <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Дневная норма</b><small>Цель по калориям</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Дневная норма</b><small>Цель по калориям</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{saved?"Сохранено ✓":"Что видят друзья"}</small></div><i>›</i></summary><div className="profile-group-content settings"><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
@@ -393,16 +398,20 @@ function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>vo
 
 export function RitmApp() {
   const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today"); const [headerCoins,setHeaderCoins]=useState(0);
+  const [onboarding,setOnboarding]=useState<"loading"|"show"|"done">("loading");
+  const [onboardingUser,setOnboardingUser]=useState<string|null>(null);
   const user=useMemo(()=>session.data?.user as AppUser|undefined,[session.data]);
   const userId=user?.id;
   useEffect(()=>{
     if(!userId) return;
     // Определяем пояс браузером один раз. Если человек выбрал его руками, не трогаем.
-    void jsonFetch<{timezone?:string|null}>("/api/profile").then(profile=>{
+    void jsonFetch<{timezone?:string|null;onboardingCompleted?:boolean}>("/api/profile").then(profile=>{
+      setOnboarding(profile.onboardingCompleted?"done":"show");
+      setOnboardingUser(userId);
       if(profile.timezone) return;
       const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
       return jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})});
-    }).catch(()=>{});
+    }).catch(()=>{setOnboarding("done");setOnboardingUser(userId);});
   },[userId]);
   useEffect(()=>{
     if(!userId) return;
@@ -410,5 +419,7 @@ export function RitmApp() {
   },[userId,tab]);
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
-  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><CoinsChip coins={headerCoins}/><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
+  if(onboarding==="loading"||onboardingUser!==userId)return <main className="loading"><div className="pulse">🔥</div></main>;
+  if(onboarding==="show")return <Onboarding onComplete={()=>setOnboarding("done")}/>;
+  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><CoinsChip coins={headerCoins}/><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user} onOpenOnboarding={()=>setOnboarding("show")}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
 }
