@@ -32,7 +32,7 @@ export async function POST(request:Request) {
   const l=parsed.data;
   await db.query(`insert into profiles(user_id) values($1) on conflict(user_id) do nothing`,[user.id]);
   const result=await db.query(`insert into daily_logs (user_id,log_date,calories_eaten,active_calories,calorie_goal,weight_kg)
-    values ($1,$2,coalesce($3,0),$4,coalesce($5,2000),$6)
+    values ($1,$2,coalesce($3,0),coalesce($4,0),coalesce($5,2000),$6)
     on conflict (user_id,log_date) do update set
       calories_eaten=coalesce($3,daily_logs.calories_eaten),
       active_calories=coalesce($4,daily_logs.active_calories),
