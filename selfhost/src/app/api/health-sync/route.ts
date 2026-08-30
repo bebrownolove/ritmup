@@ -7,9 +7,11 @@ const schema = z.object({
   // Дата не обязательна: без неё берём сегодняшний день в часовом поясе пользователя,
   // чтобы команде на iPhone не приходилось её форматировать.
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
-  activeCalories: z.coerce.number().int().min(0).max(20000).nullish(),
-  steps: z.coerce.number().int().min(0).max(200000).nullish(),
-  exerciseMinutes: z.coerce.number().int().min(0).max(1440).nullish(),
+  // Apple Health отдаёт дробные значения (132.695 ккал), поэтому округляем,
+  // а не требуем целое: иначе команда с iPhone получала бы 400.
+  activeCalories: z.coerce.number().min(0).max(20000).nullish().transform(v=>v==null?v:Math.round(v)),
+  steps: z.coerce.number().min(0).max(200000).nullish().transform(v=>v==null?v:Math.round(v)),
+  exerciseMinutes: z.coerce.number().min(0).max(1440).nullish().transform(v=>v==null?v:Math.round(v)),
   weightKg: z.coerce.number().min(20).max(400).nullish(),
 }).refine((value) => value.activeCalories != null || value.steps != null
   || value.exerciseMinutes != null || value.weightKg != null, { message: "no_metrics" });
