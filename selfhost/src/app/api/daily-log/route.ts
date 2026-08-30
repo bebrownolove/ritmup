@@ -19,10 +19,14 @@ export async function GET(request:Request) {
   if(!user) return Response.json({error:"unauthorized"},{status:401});
   const parsed=dateSchema.safeParse(new URL(request.url).searchParams.get("date"));
   if(!parsed.success) return Response.json({error:"invalid_date"},{status:400});
-  const result=await db.query(`select calories_eaten as "caloriesEaten", active_calories as "activeCalories",
-    calorie_goal as "calorieGoal", steps, exercise_minutes as "exerciseMinutes",
-    weight_kg::float8 as "weightKg", health_synced_at as "healthSyncedAt"
-    from daily_logs where user_id=$1 and log_date=$2`,[user.id,parsed.data]);
+  const result=await db.query(`select l.calories_eaten as "caloriesEaten", l.active_calories as "activeCalories",
+    case when l.log_date=(now() at time zone coalesce(p.timezone,'UTC'))::date
+         then coalesce(p.calorie_goal,l.calorie_goal,2000)
+         else coalesce(l.calorie_goal,p.calorie_goal,2000) end as "calorieGoal",
+    l.steps, l.exercise_minutes as "exerciseMinutes",
+    l.weight_kg::float8 as "weightKg", l.health_synced_at as "healthSyncedAt"
+    from daily_logs l left join profiles p on p.user_id=l.user_id
+    where l.user_id=$1 and l.log_date=$2`,[user.id,parsed.data]);
   if(result.rows[0]) return Response.json(result.rows[0]);
   // Дня ещё нет — показываем личную норму, а не общее число.
   const profile=await db.query<{calorieGoal:number}>(`select calorie_goal as "calorieGoal" from profiles where user_id=$1`,[user.id]);

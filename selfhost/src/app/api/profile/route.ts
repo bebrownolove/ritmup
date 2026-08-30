@@ -66,5 +66,15 @@ export async function PATCH(request: Request) {
       value.calorieGoal ?? null, value.heightCm ?? null, value.sex ?? null,
       value.birthYear ?? null, value.activityLevel ?? null, value.targetWeightKg ?? null,
       value.onboardingCompleted ?? null]);
+  // Новая норма должна сразу появиться на экране «Сегодня». Раньше дневная
+  // запись продолжала хранить старые 2000 ккал и перекрывала профиль.
+  if (value.calorieGoal !== undefined) {
+    await db.query(
+      `update daily_logs d set calorie_goal=$2, updated_at=now()
+        from profiles p
+       where p.user_id=$1 and d.user_id=p.user_id
+         and d.log_date=(now() at time zone coalesce(p.timezone,'UTC'))::date`,
+      [user.id, value.calorieGoal]);
+  }
   return Response.json({ ok: true });
 }
