@@ -17,6 +17,7 @@ type AppUser = { id:string; name:string; email:string; username?:string|null };
 type HealthSnapshot = { calorieGoal?:number; activeCalories:number; steps?:number|null; exerciseMinutes?:number|null; weightKg:number|null; healthSyncedAt?:string|null };
 type HealthToken = { token:string; lastUsedAt:string|null };
 type HealthKitDetail = { date?:string; activeCalories?:number; steps?:number; exerciseMinutes?:number; weightKg?:number|null; error?:string };
+type Theme = "system"|"light"|"dark";
 
 declare global {
   interface Window {
@@ -349,17 +350,17 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
   async function rotate(){if(!window.confirm("Старый ключ сразу перестанет работать, команду на iPhone придётся поправить. Перевыпустить?"))return;setToken(await jsonFetch<HealthToken>("/api/health-token",{method:"POST"}));setNote("Новый ключ готов");setTimeout(()=>setNote(""),1600);}
   return <div className={`${embedded?"health-setup embedded":"list-card health-setup"}`}>
     {!embedded&&<h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>}
-    {embedded&&token?.lastUsedAt&&<small className="save-note">Работает ✓</small>}
+    <div className={`health-connect-state ${token?.lastUsedAt?"connected":""}`}><span>{token?.lastUsedAt?"✓":"1"}</span><div><b>{token?.lastUsedAt?"Связь работает":"Подключение займёт пару минут"}</b><small>{token?.lastUsedAt?`Последняя отправка ${new Date(token.lastUsedAt).toLocaleDateString("ru",{day:"numeric",month:"short"})}`:"Нужна бесплатная команда на iPhone"}</small></div></div>
     <TimezoneRow/>
-    <p className="muted">PWA не может читать Apple Health в фоне. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone — вручную или несколько раз в день автоматически.</p>
+    <p className="muted health-explain">Ритм — PWA, поэтому данные передаёт команда на iPhone. После настройки она работает сама несколько раз в день.</p>
     {shortcutUrl
-      ? <><a className="shortcut-cta" href={shortcutUrl} target="_blank" rel="noreferrer">Добавить готовую команду</a>
-          <ol className="setup-steps">
-            <li>Открой ссылку выше <b>на iPhone</b> и нажми <b>«Добавить команду»</b>.</li>
-            <li>В добавленной команде найди заголовок <b>Authorization</b> и вставь туда свой ключ из поля ниже — целиком, вместе со словом <b>Bearer</b>.</li>
-            <li>Запусти команду кнопкой <b>▶</b>. iOS спросит доступ к Здоровью и разрешение на отправку — отвечай <b>«Разрешать всегда»</b>, иначе ночью команда будет ждать подтверждения.</li>
-            <li>На вкладке <b>«Автоматизация»</b> создай <b>«Время суток»</b>, выбери эту команду и включи <b>«Немедленный запуск»</b>. Повтори для <b>08:00, 12:00, 16:00, 20:00 и 23:50</b> — тогда цифры будут обновляться весь день.</li>
-          </ol></>
+      ? <><a className="shortcut-cta" href={shortcutUrl} target="_blank" rel="noreferrer"><span>↗</span> Добавить команду на iPhone</a>
+          <div className="setup-flow">
+            <div><span>1</span><p><b>Добавь команду</b><small>Открой кнопку выше на iPhone</small></p></div>
+            <div><span>2</span><p><b>Вставь личный ключ</b><small>В поле Authorization целиком с Bearer</small></p></div>
+            <div><span>3</span><p><b>Запусти один раз</b><small>Разреши доступ к Здоровью и отправку данных</small></p></div>
+          </div>
+          <div className="schedule-card"><span>⏱️</span><div><b>Обновления в течение дня</b><p>Для каждого времени создай «Время суток», выбери команду и «Немедленный запуск».</p><div className="time-chips"><i>08:00</i><i>12:00</i><i>16:00</i><i>20:00</i><i>23:50</i></div></div></div></>
       : null}
     <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть":shortcutUrl?"Собрать команду вручную":"Показать инструкцию"}</button>
     {open&&<><p className="setup-warn">Действия ищи в строке <b>«Поиск действий»</b> внизу экрана. Названия зависят от языка iPhone: русские приведены первыми, английские — в скобках.</p>
@@ -371,12 +372,11 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
       <li>Добавь два поля типа <b>Число</b>: <code>activeCalories</code> и <code>steps</code>. В значение каждого подставь переменную через <b>«Выбрать переменную»</b> — там будет два пункта «Данные Здоровья», первый от карточки с энергией, второй от карточки с шагами. Стоящий в поле <b>ноль сначала сотри</b>, иначе он приклеится к числу.</li>
       <li>Нажми <b>▶</b>. Сервер должен ответить <code>{"{"}&quot;ok&quot;:true{"}"}</code> с твоими числами. Затем создай автоматизации на <b>08:00, 12:00, 16:00, 20:00 и 23:50</b> с немедленным запуском.</li>
     </ol></>}
-    <p className="setup-note">Дату присылать не нужно — сервер знает твой часовой пояс и сам поймёт, за какой день числа. Активную энергию пишут в основном Apple Watch; без часов она будет почти нулевой, а шаги телефон считает сам.</p>
-    <div className="token-row"><div><small>Адрес</small><code>{endpoint}</code></div><button onClick={()=>copy(endpoint,"Адрес")}>Копировать</button></div>
-    <div className="token-row"><div><small>Личный ключ</small><code>{token?`Bearer ${token.token}`:"…"}</code></div><button disabled={!token} onClick={()=>token&&copy(`Bearer ${token.token}`,"Ключ")}>Копировать</button></div>
-    <p className="privacy-note">Ключ открывает доступ только к отправке твоих дневных чисел. Никому его не пересылай — если утёк, перевыпусти.</p>
+    <p className="setup-note">Шаги считает сам iPhone. Активную энергию точнее всего заполняют Apple Watch.</p>
+    <div className="health-credentials"><div className="token-row"><div><small>АДРЕС</small><code>{endpoint}</code></div><button onClick={()=>copy(endpoint,"Адрес")}>Копировать</button></div>
+    <div className="token-row"><div><small>ЛИЧНЫЙ КЛЮЧ</small><code>{token?`Bearer ${token.token}`:"…"}</code></div><button disabled={!token} onClick={()=>token&&copy(`Bearer ${token.token}`,"Ключ")}>Копировать</button></div></div>
+    <details className="health-security"><summary>Безопасность ключа</summary><p>Ключ разрешает только отправлять твои дневные числа. Не пересылай его другим.</p><button className="danger" onClick={rotate}>Перевыпустить ключ</button></details>
     {note&&<small className="health-status">{note}</small>}
-    <button className="danger" onClick={rotate}>Перевыпустить ключ</button>
   </div>;
 }
 
@@ -388,11 +388,29 @@ function Profile({user,onOpenOnboarding}:{user:{name:string;email:string;usernam
     <div className="profile-menu">
       <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Дневная норма</b><small>Цель по калориям</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{saved?"Сохранено ✓":"Что видят друзья"}</small></div><i>›</i></summary><div className="profile-group-content settings"><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
     </div>
     <button className="danger" onClick={()=>authClient.signOut()}>Выйти из аккаунта</button>
   </section>;
+}
+
+function ThemeControl() {
+  const [theme,setTheme]=useState<Theme>("system");
+  useEffect(()=>{
+    const saved=localStorage.getItem("ritm-theme") as Theme|null;
+    if(saved==="light"||saved==="dark"||saved==="system")queueMicrotask(()=>setTheme(saved));
+  },[]);
+  function change(next:Theme) {
+    setTheme(next); localStorage.setItem("ritm-theme",next);
+    if(next==="system")document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme",next);
+    const metas=document.querySelectorAll('meta[name="theme-color"]');
+    metas.forEach((meta,index)=>meta.setAttribute("content",next==="system"?(index===0?"#ffffff":"#121713"):next==="dark"?"#121713":"#ffffff"));
+  }
+  const options:[Theme,string,string][]=[["system","◐","Как на iPhone"],["light","☀️","Светлая"],["dark","🌙","Тёмная"]];
+  return <div className="theme-picker" role="radiogroup" aria-label="Тема оформления">{options.map(([key,icon,label])=><button key={key} role="radio" aria-checked={theme===key} className={theme===key?"active":""} onClick={()=>change(key)}><span>{icon}</span><b>{label}</b><i>✓</i></button>)}</div>;
 }
 function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>void}){return <button className="toggle-row" onClick={onClick}><span>{label}</span><i className={value?"on":""}><u/></i></button>}
 

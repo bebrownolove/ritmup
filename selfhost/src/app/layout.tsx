@@ -18,12 +18,17 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121713" },
+  ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru">
+      <head><script dangerouslySetInnerHTML={{__html:`try{const t=localStorage.getItem('ritm-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}`}}/></head>
       <body>{children}<ServiceWorker /></body>
     </html>
   );

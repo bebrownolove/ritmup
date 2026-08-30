@@ -219,3 +219,107 @@
   .onboarding-step,.result-step h1 { animation:none!important; }
   * { scroll-behavior:auto!important; }
 }
+
+/* ИМТ теперь читается как диапазон, а не как одинокое число. */
+.bmi-box { display:grid; gap:17px; }
+.bmi-summary { display:flex; align-items:center; gap:16px; }
+.bmi-box>.bmi-summary:first-child { min-width:0; text-align:left; }
+.bmi-summary>div:first-child { min-width:72px; text-align:center; }
+.bmi-scale { position:relative; padding-top:27px; }
+.bmi-track { display:grid; grid-template-columns:17.3fr 25fr 19.2fr 38.5fr; gap:3px; height:12px; overflow:hidden; border-radius:8px; }
+.bmi-track i { display:block; }
+.bmi-track .under { background:#54a8e8; }
+.bmi-track .normal { background:#58cc72; }
+.bmi-track .high { background:#f2b84b; }
+.bmi-track .obese { background:#ef715d; }
+.bmi-marker { position:absolute; top:0; z-index:2; transform:translateX(-50%); transition:left .55s cubic-bezier(.2,.8,.2,1); }
+.bmi-marker span { display:block; min-width:38px; padding:3px 6px; border-radius:8px; background:var(--ink); color:var(--card); text-align:center; font-size:11px; font-weight:900; box-shadow:0 3px 9px #0002; }
+.bmi-marker i { display:block; width:0; height:0; margin:auto; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--ink); }
+.bmi-labels { display:grid; grid-template-columns:17.3fr 25fr 19.2fr 38.5fr; gap:4px; margin-top:7px; }
+.bmi-labels span { min-width:0; color:var(--muted); font-size:9px; line-height:1.25; text-align:center; }
+.bmi-labels b { display:block!important; overflow:hidden; font-size:9px!important; white-space:nowrap; text-overflow:ellipsis; }
+
+/* Короткая визуальная настройка Apple Health. */
+.health-connect-state { display:flex; align-items:center; gap:12px; padding:13px; border:1px solid var(--line); border-radius:15px; background:var(--surface-soft,#f7faf5); }
+.health-connect-state>span { flex:none; display:grid; place-items:center; width:35px; height:35px; border-radius:12px; background:#edf0ea; color:var(--muted); font-weight:900; }
+.health-connect-state.connected>span { background:#daf4d5; color:#238742; }
+.health-connect-state>div { display:grid; gap:2px; }
+.health-connect-state small { color:var(--muted); }
+.health-explain { padding:0 2px; }
+.setup-flow { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.setup-flow>div { display:grid; align-content:start; gap:8px; padding:12px; border:1px solid var(--line); border-radius:15px; background:var(--surface-soft,#f7faf5); }
+.setup-flow>div>span { display:grid; place-items:center; width:27px; height:27px; border-radius:9px; background:var(--green); color:#fff; font-size:12px; font-weight:950; }
+.setup-flow p { display:grid; gap:4px; margin:0; }
+.setup-flow b { font-size:13px; }
+.setup-flow small { color:var(--muted); font-size:11px; line-height:1.35; }
+.schedule-card { display:flex; gap:12px; padding:14px; border:1px solid #ffe0a5; border-radius:16px; background:var(--warning-soft,#fff5e2); }
+.schedule-card>span { font-size:24px; }
+.schedule-card p { margin:4px 0 10px; color:var(--muted); font-size:12px; line-height:1.45; }
+.time-chips { display:flex; flex-wrap:wrap; gap:5px; }
+.time-chips i { padding:5px 7px; border-radius:8px; background:var(--card); color:var(--ink); font-size:10px; font-style:normal; font-weight:850; }
+.health-credentials { display:grid; gap:8px; }
+.health-security { border-top:1px solid var(--line); padding-top:10px; }
+.health-security summary { cursor:pointer; color:var(--muted); font-size:12px; font-weight:800; }
+.health-security p { color:var(--muted); font-size:12px; line-height:1.45; }
+.setup-steps { padding:0; list-style:none; counter-reset:setup; }
+.setup-steps li { position:relative; padding:13px 13px 13px 48px; border:1px solid var(--line); border-radius:14px; background:var(--surface-soft,#f7faf5); }
+.setup-steps li:before { counter-increment:setup; content:counter(setup); position:absolute; left:12px; top:12px; display:grid; place-items:center; width:25px; height:25px; border-radius:8px; background:var(--green); color:#fff; font-size:11px; font-weight:900; }
+
+.theme-picker { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:14px; }
+.theme-picker button { position:relative; display:grid; justify-items:center; gap:7px; min-width:0; padding:14px 7px; border:2px solid var(--line); border-radius:15px; background:var(--surface-soft,#f7faf5); color:var(--ink); }
+.theme-picker button>span { font-size:23px; }
+.theme-picker button>b { font-size:11px; text-align:center; }
+.theme-picker button>i { position:absolute; top:7px; right:7px; opacity:0; display:grid; place-items:center; width:18px; height:18px; border-radius:50%; background:var(--green); color:#fff; font-size:10px; font-style:normal; transform:scale(.6); transition:.18s; }
+.theme-picker button.active { border-color:var(--green); background:var(--green-soft,#eef8ea); }
+.theme-picker button.active>i { opacity:1; transform:scale(1); }
+
+/* Тема: системная по умолчанию, ручной выбор хранится только на устройстве. */
+:root {
+  color-scheme:light dark;
+  --page:#f5f1e7;
+  --chrome:#fffffff2;
+  --surface-soft:#f7faf5;
+  --input:#fcfdfb;
+  --green-soft:#eef8ea;
+  --warning-soft:#fff5e2;
+  --danger-soft:#fdeeeb;
+}
+:root[data-theme="light"] { color-scheme:light; }
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --ink:#edf5ef;--muted:#9aa99f;--green:#62d77b;--green-dark:#75e58c;
+  --cream:#171c18;--card:#1b211d;--line:#303a32;--page:#101411;--chrome:#151a16f2;
+  --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;
+}
+@media(prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme:dark;
+    --ink:#edf5ef;--muted:#9aa99f;--green:#62d77b;--green-dark:#75e58c;
+    --cream:#171c18;--card:#1b211d;--line:#303a32;--page:#101411;--chrome:#151a16f2;
+    --surface-soft:#242b25;--input:#151a16;--green-soft:#203628;--warning-soft:#332a19;--danger-soft:#382321;
+  }
+}
+html,body,.loading { background:var(--page); }
+.app-shell header,nav { background:var(--chrome); }
+.auth-shell { background:radial-gradient(circle at 50% 0,var(--green-soft),transparent 42%),var(--page); }
+.onboarding-shell { background:radial-gradient(circle at 50% 5%,var(--green-soft) 0,var(--page) 42%,var(--page) 100%); }
+.auth-card,.profile-menu,.onboarding-card,.goal-choices button,.google,.day-switch button.active,.range-switch button.active,.buddy-bubbles span,.missed-days button { background:var(--card); color:var(--ink); }
+.segmented,.range-switch,.day-switch { background:var(--surface-soft); }
+.segmented button.active,.profile-group[open] summary { background:var(--surface-soft); color:var(--ink); }
+.auth-form input,.quick-add input,.search-card input,.body-form input,.body-form select,.weight-row input,.workout-add input,.goal-row input,.tz-row select,.onboarding-form input,.onboarding-form select { background:var(--input); color:var(--ink); }
+.ring:before { background:var(--card); }
+.health-values div,.weight-history div,.calc-box,.bmi-box,.tz-row,.token-row,.setup-note { background:var(--surface-soft); }
+.privacy-note,.rank-row.me,.recalculate { background:var(--green-soft); color:var(--muted); }
+.streak,.coins-card,.milestone.done,.install-hint { background:var(--warning-soft); }
+.setup-warn { background:var(--warning-soft); color:var(--muted); }
+.bmi-box.normal { background:var(--green-soft); }
+.bmi-box.low,.bmi-box.high { background:var(--warning-soft); }
+.bmi-box.very-low,.bmi-box.obese-1,.bmi-box.obese-2,.bmi-box.obese-3 { background:var(--danger-soft); }
+.auth-form label,.body-form label,.goal-row label,.weight-row label,.onboarding-form label,.setup-steps { color:var(--ink); }
+
+@media(max-width:620px) {
+  .setup-flow { grid-template-columns:1fr; }
+  .setup-flow>div { grid-template-columns:30px 1fr; align-items:center; }
+  .bmi-labels b { font-size:8px!important; }
+  .bmi-labels span { font-size:8px; }
+}

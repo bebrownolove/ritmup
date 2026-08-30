@@ -68,6 +68,7 @@ export function BodyCard({embedded=false}:{embedded?:boolean}) {
   const ready=Boolean(weightKg&&profile.heightCm&&profile.sex&&age);
   const index=weightKg&&profile.heightCm?bmi(weightKg,profile.heightCm):null;
   const category=index?bmiCategory(index):null;
+  const bmiPosition=index?Math.min(98,Math.max(2,((index-14)/(40-14))*100)):0;
   const basal=ready?basalRate({weightKg:weightKg!,heightCm:profile.heightCm!,age:age!,sex:profile.sex!}):null;
   const maintain=basal?maintenance(basal,profile.activityLevel??"light"):null;
   const target=profile.targetWeightKg??null;
@@ -80,8 +81,12 @@ export function BodyCard({embedded=false}:{embedded?:boolean}) {
     {embedded&&note&&<small className="save-note">{note}</small>}
 
     {index&&category&&<div className={`bmi-box ${category.key}`}>
-      <div><b>{index.toFixed(1)}</b><small>ИМТ</small></div>
-      <div><b>{category.label}</b><small>при весе {weightKg!.toFixed(1)} кг и росте {profile.heightCm} см</small></div>
+      <div className="bmi-summary"><div><b>{index.toFixed(1)}</b><small>Твой ИМТ</small></div><div><b>{category.label}</b><small>при весе {weightKg!.toFixed(1)} кг и росте {profile.heightCm} см</small></div></div>
+      <div className="bmi-scale" aria-label={`ИМТ ${index.toFixed(1)} — ${category.label}`}>
+        <div className="bmi-marker" style={{left:`${bmiPosition}%`}}><span>{index.toFixed(1)}</span><i/></div>
+        <div className="bmi-track"><i className="under"/><i className="normal"/><i className="high"/><i className="obese"/></div>
+        <div className="bmi-labels"><span><b>Дефицит</b>&lt; 18,5</span><span><b>Норма</b>18,5–24,9</span><span><b>Выше нормы</b>25–29,9</span><span><b>Ожирение</b>≥ 30</span></div>
+      </div>
     </div>}
 
     <form className="body-form" onSubmit={save}>
