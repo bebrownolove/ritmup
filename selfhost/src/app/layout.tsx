@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { ServiceWorker } from "@/components/service-worker";
 import "./globals.css";
+import "./mobile.css";
 
 export const metadata: Metadata = {
   title: "Ритм — дневник питания и привычек",

@@ -1,0 +1,120 @@
+/* На экране дневника остаётся одна задача за раз. */
+.day-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 5px;
+  background: #e9ede5;
+  border-radius: 16px;
+  position: sticky;
+  top: 82px;
+  z-index: 5;
+}
+
+.day-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.day-switch button span { font-size: 17px; }
+.day-switch button.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 3px 10px #33442718;
+}
+.day-panel { display: grid; gap: 16px; }
+
+/* Профиль — список раскрываемых настроек вместо длинной стены карточек. */
+.profile-menu {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 5px 18px #5c67470c;
+}
+.profile-group { border-top: 1px solid var(--line); }
+.profile-group:first-child { border-top: 0; }
+.profile-group summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 40px 1fr 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.profile-group summary::-webkit-details-marker { display: none; }
+.profile-group summary > span { font-size: 23px; text-align: center; }
+.profile-group summary > div { display: grid; gap: 2px; }
+.profile-group summary b { font-size: 16px; }
+.profile-group summary small { color: var(--muted); font-size: 12px; }
+.profile-group summary > i {
+  font-style: normal;
+  font-size: 27px;
+  color: #9ba49d;
+  transition: transform .2s;
+}
+.profile-group[open] summary > i { transform: rotate(90deg); }
+.profile-group[open] summary { background: #f8faf6; }
+.profile-group-content { padding: 4px 18px 20px; border-top: 1px solid #eff1eb; }
+.profile-group-content > .embedded { padding-top: 16px; }
+.body-card.embedded, .health-setup.embedded { display: grid; gap: 14px; }
+.save-note {
+  display: block;
+  color: var(--green-dark);
+  font-weight: 800;
+  text-align: right;
+  margin-top: 8px;
+}
+
+@media (max-width: 620px) {
+  .content { padding: 16px 12px; }
+  .screen { gap: 14px; }
+  .app-shell header { min-height: 62px; padding-left: 18px; padding-right: 18px; }
+  .brand { font-size: 20px; }
+  .hero-row { align-items: flex-start; }
+  .hero-row h2 { font-size: 27px; }
+  .hero-row .muted { font-size: 14px; margin-top: 7px; }
+  .streak { padding: 8px 12px; border-radius: 15px; }
+  .streak span { font-size: 25px; }
+  .streak b { font-size: 20px; }
+  .progress-card { min-height: 0; padding: 14px; gap: 14px; border-radius: 19px; }
+  .ring { width: 94px; height: 94px; }
+  .ring:before { inset: 10px; }
+  .ring b { font-size: 23px; }
+  .ring small { font-size: 11px; }
+  .progress-card h3 { font-size: 18px; }
+  .progress-card p { font-size: 12px; line-height: 1.4; }
+  .milestone { padding: 11px 13px; border-radius: 15px; }
+  .milestone p { font-size: 13px; }
+  .milestone-head span { font-size: 18px; }
+  .day-switch { top: 70px; }
+  .day-switch button { display: grid; gap: 2px; padding: 8px 4px; font-size: 11px; }
+  .day-switch button span { font-size: 18px; }
+  .quick-add, .list-card, .health-card, .weight-card, .search-card { padding: 15px; border-radius: 18px; }
+  .health-values { gap: 6px; }
+  .health-values div { padding: 10px 4px; }
+  .health-values b { font-size: 19px; }
+  .health-values small { font-size: 10px; }
+  .profile-head { gap: 12px; }
+  .profile-head h2 { font-size: 25px; }
+  .profile-head p { font-size: 12px; overflow-wrap: anywhere; }
+  .big-avatar { width: 58px; height: 58px; font-size: 25px; }
+  .profile-group summary { padding: 14px; }
+  .profile-group-content { padding: 2px 14px 17px; }
+  .health-setup.embedded .setup-steps { padding-left: 22px; }
+  .health-setup.embedded .setup-steps li { margin-bottom: 10px; }
+  .token-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .token-row code { font-size: 10px; }
+}

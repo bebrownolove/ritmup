@@ -174,6 +174,7 @@ function WorkoutsCard({date}:{date:string}) {
 
 function Today() {
   const date=todayKey();
+  const [section,setSection]=useState<"food"|"movement"|"weight">("food");
   const [entries,setEntries]=useState<Entry[]>([]); const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
   const [busy,setBusy]=useState(false);
   const [health,setHealth]=useState<HealthSnapshot>({activeCalories:0,steps:null,weightKg:null});
@@ -230,19 +231,28 @@ function Today() {
   return <section className="screen slide-up">
     <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div><div className="streak"><span>🔥</span><b>{streak}</b><small>{plural(streak,"день","дня","дней")}</small></div></div>
     <div className="progress-card"><div className={`ring ${ringState}`} style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{ringState==="over"?`Перебор на ${total-goal} ккал`:ringState==="close"?"Норма почти выбрана":percent<50?"Отличное начало":"Идёшь ровно"}</h3><p>{ringState==="over"?"Это не провал — просто учитывай при завтрашнем планировании.":"Добавляй еду по мере дня. Ничего подтверждать вечером не нужно."}</p></div></div>
-    <div className="health-card">
-      <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
-      <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.weightKg?health.weightKg.toFixed(1):"—"}</b><small>вес, кг</small></div></div>
-      {healthAvailable&&<button className="health-sync" onClick={syncHealth} disabled={healthBusy}>{healthBusy?"Синхронизация…":"Обновить из Apple Health"}</button>}
-      {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Данные с iPhone подключаются за пару минут — в профиле, разделом ниже.</p>}
-      {healthStatus&&<small className="health-status">{healthStatus}</small>}
-    </div>
     <Milestone streak={streak}/>
-    <RepairCard coins={coins} onChanged={refreshDay}/>
-    <WeightCard date={date}/>
-    <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
-    <WorkoutsCard date={date}/>
-    <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
+    <div className="day-switch" role="tablist" aria-label="Раздел дневника">
+      <button role="tab" className={section==="food"?"active":""} aria-selected={section==="food"} onClick={()=>setSection("food")}><span>🍽️</span>Питание</button>
+      <button role="tab" className={section==="movement"?"active":""} aria-selected={section==="movement"} onClick={()=>setSection("movement")}><span>🏃</span>Движение</button>
+      <button role="tab" className={section==="weight"?"active":""} aria-selected={section==="weight"} onClick={()=>setSection("weight")}><span>⚖️</span>Вес</button>
+    </div>
+    {section==="food"&&<div className="day-panel slide-up">
+      <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
+      <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
+      <RepairCard coins={coins} onChanged={refreshDay}/>
+    </div>}
+    {section==="movement"&&<div className="day-panel slide-up">
+      <div className="health-card">
+        <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
+        <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.exerciseMinutes??"—"}</b><small>минут</small></div></div>
+        {healthAvailable&&<button className="health-sync" onClick={syncHealth} disabled={healthBusy}>{healthBusy?"Синхронизация…":"Обновить из Apple Health"}</button>}
+        {!healthAvailable&&!health.healthSyncedAt&&<p className="health-hint">Подключение находится в профиле → Apple Health.</p>}
+        {healthStatus&&<small className="health-status">{healthStatus}</small>}
+      </div>
+      <WorkoutsCard date={date}/>
+    </div>}
+    {section==="weight"&&<div className="day-panel slide-up"><WeightCard date={date}/></div>}
   </section>;
 }
 
@@ -325,15 +335,16 @@ function GoalRow() {
   </form>;
 }
 
-function HealthSetup() {
+function HealthSetup({embedded=false}:{embedded?:boolean}) {
   const shortcutUrl=process.env.NEXT_PUBLIC_HEALTH_SHORTCUT_URL;
   const [token,setToken]=useState<HealthToken|null>(null); const [open,setOpen]=useState(false); const [note,setNote]=useState("");
   useEffect(()=>{jsonFetch<HealthToken>("/api/health-token").then(setToken).catch(()=>{});},[]);
   const endpoint=`${typeof window==="undefined"?"":window.location.origin}/api/health-sync`;
   async function copy(text:string,label:string){try{await navigator.clipboard.writeText(text);setNote(`${label} скопирован`);}catch{setNote("Не вышло скопировать — выдели и скопируй вручную");}setTimeout(()=>setNote(""),1600);}
   async function rotate(){if(!window.confirm("Старый ключ сразу перестанет работать, команду на iPhone придётся поправить. Перевыпустить?"))return;setToken(await jsonFetch<HealthToken>("/api/health-token",{method:"POST"}));setNote("Новый ключ готов");setTimeout(()=>setNote(""),1600);}
-  return <div className="list-card health-setup">
-    <h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>
+  return <div className={`${embedded?"health-setup embedded":"list-card health-setup"}`}>
+    {!embedded&&<h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>}
+    {embedded&&token?.lastUsedAt&&<small className="save-note">Работает ✓</small>}
     <TimezoneRow/>
     <p className="muted">Сайт сам читать Apple Health не может — это запрещено в iOS. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone: раз в день, автоматически.</p>
     {shortcutUrl
@@ -369,10 +380,12 @@ function Profile({user}:{user:{name:string;email:string;username?:string|null}})
   useEffect(()=>{jsonFetch<typeof settings>("/api/profile").then(v=>setSettings(s=>({...s,...v})));},[]);
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
   return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><div className="big-avatar">{user.name.slice(0,1).toUpperCase()}</div><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
-    <div className="list-card settings"><h3>Норма</h3><GoalRow/></div>
-    <BodyCard/>
-    <div className="list-card settings"><h3>Приватность активности {saved&&<small>Сохранено ✓</small>}</h3><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div>
-    <HealthSetup/>
+    <div className="profile-menu">
+      <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Дневная норма</b><small>Цель по калориям</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{saved?"Сохранено ✓":"Что видят друзья"}</small></div><i>›</i></summary><div className="profile-group-content settings"><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
+    </div>
     <button className="danger" onClick={()=>authClient.signOut()}>Выйти из аккаунта</button>
   </section>;
 }

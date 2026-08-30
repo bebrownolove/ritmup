@@ -7,6 +7,17 @@ type Profile = {
   heightCm?:number|null; sex?:"male"|"female"|null; birthYear?:number|null;
   activityLevel?:string; targetWeightKg?:number|null; calorieGoal?:number;
 };
+type Draft = {heightCm:string;sex:""|"male"|"female";birthYear:string;activityLevel:string;targetWeightKg:string};
+
+function toDraft(profile:Profile):Draft {
+  return {
+    heightCm:profile.heightCm?String(profile.heightCm):"",
+    sex:profile.sex??"",
+    birthYear:profile.birthYear?String(profile.birthYear):"",
+    activityLevel:profile.activityLevel??"light",
+    targetWeightKg:profile.targetWeightKg?String(profile.targetWeightKg):"",
+  };
+}
 
 async function api<T>(url:string, init?:RequestInit):Promise<T> {
   const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}});
@@ -14,8 +25,9 @@ async function api<T>(url:string, init?:RequestInit):Promise<T> {
   return response.json();
 }
 
-export function BodyCard() {
+export function BodyCard({embedded=false}:{embedded?:boolean}) {
   const [profile,setProfile]=useState<Profile>({});
+  const [draft,setDraft]=useState<Draft>(()=>toDraft({}));
   const [weightKg,setWeightKg]=useState<number|null>(null);
   const [note,setNote]=useState("");
   const load=async()=>{
@@ -24,23 +36,26 @@ export function BodyCard() {
       api<{date:string;weightKg:number}[]>("/api/weight"),
     ]);
     setProfile(saved);
+    setDraft(toDraft(saved));
     setWeightKg(history.length?history[history.length-1].weightKg:null);
   };
   useEffect(()=>{void Promise.resolve().then(()=>load()).catch(()=>{});},[]);
 
   async function save(event:FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data=new FormData(event.currentTarget);
     const patch={
-      heightCm:Number(data.get("heightCm"))||null,
-      sex:(String(data.get("sex"))||null) as "male"|"female"|null,
-      birthYear:Number(data.get("birthYear"))||null,
-      activityLevel:String(data.get("activityLevel")),
-      targetWeightKg:Number(String(data.get("targetWeightKg")).replace(",","."))||null,
+      heightCm:Number(draft.heightCm)||null,
+      sex:draft.sex||null,
+      birthYear:Number(draft.birthYear)||null,
+      activityLevel:draft.activityLevel,
+      targetWeightKg:Number(draft.targetWeightKg.replace(",","."))||null,
     };
-    await api("/api/profile",{method:"PATCH",body:JSON.stringify(patch)}).catch(()=>{});
-    setNote("Сохранено ✓"); setTimeout(()=>setNote(""),1600);
-    await load().catch(()=>{});
+    try {
+      await api("/api/profile",{method:"PATCH",body:JSON.stringify(patch)});
+      await load();
+      setNote("Сохранено ✓");
+    } catch { setNote("Не удалось сохранить"); }
+    setTimeout(()=>setNote(""),1600);
   }
 
   async function applyGoal(value:number) {
@@ -60,8 +75,9 @@ export function BodyCard() {
   const suggested=maintain?goalCalories(maintain,direction):null;
   const weeks=maintain&&target&&weightKg&&suggested?weeksToTarget(weightKg,target,Math.abs(maintain-suggested)):null;
 
-  return <div className="list-card settings body-card">
-    <h3>Тело и расчёты {note&&<small>{note}</small>}</h3>
+  return <div className={`${embedded?"body-card embedded":"list-card settings body-card"}`}>
+    {!embedded&&<h3>Тело и расчёты {note&&<small>{note}</small>}</h3>}
+    {embedded&&note&&<small className="save-note">{note}</small>}
 
     {index&&category&&<div className={`bmi-box ${category.key}`}>
       <div><b>{index.toFixed(1)}</b><small>ИМТ</small></div>
@@ -69,11 +85,11 @@ export function BodyCard() {
     </div>}
 
     <form className="body-form" onSubmit={save}>
-      <label>Рост, см<input name="heightCm" type="number" min="100" max="250" defaultValue={profile.heightCm??""} placeholder="180"/></label>
-      <label>Пол<select name="sex" defaultValue={profile.sex??""}><option value="">—</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
-      <label>Год рождения<input name="birthYear" type="number" min="1900" max="2100" defaultValue={profile.birthYear??""} placeholder="1995"/></label>
-      <label>Целевой вес, кг<input name="targetWeightKg" type="number" step="0.1" min="20" max="400" defaultValue={profile.targetWeightKg??""} placeholder="72"/></label>
-      <label className="wide">Активность<select name="activityLevel" defaultValue={profile.activityLevel??"light"}>
+      <label>Рост, см<input name="heightCm" type="number" min="100" max="250" value={draft.heightCm} onChange={event=>setDraft(current=>({...current,heightCm:event.target.value}))} placeholder="180"/></label>
+      <label>Пол<select name="sex" value={draft.sex} onChange={event=>setDraft(current=>({...current,sex:event.target.value as Draft["sex"]}))}><option value="">—</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
+      <label>Год рождения<input name="birthYear" type="number" min="1900" max="2100" value={draft.birthYear} onChange={event=>setDraft(current=>({...current,birthYear:event.target.value}))} placeholder="1995"/></label>
+      <label>Целевой вес, кг<input name="targetWeightKg" type="number" step="0.1" min="20" max="400" value={draft.targetWeightKg} onChange={event=>setDraft(current=>({...current,targetWeightKg:event.target.value}))} placeholder="72"/></label>
+      <label className="wide">Активность<select name="activityLevel" value={draft.activityLevel} onChange={event=>setDraft(current=>({...current,activityLevel:event.target.value}))}>
         {Object.entries(ACTIVITY).map(([key,item])=><option key={key} value={key}>{item.label}</option>)}</select></label>
       <button className="primary wide">Сохранить</button>
     </form>
