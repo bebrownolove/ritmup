@@ -35,7 +35,14 @@ export function Milestone({streak}:{streak:number}) {
 
 type RepairState={cost:number;coins:number;missed:string[]};
 
-export function CoinsCard({coins,onChanged}:{coins:number;onChanged:()=>void}) {
+/** Монеты в шапке: цифра всегда на виду, но места не занимает. */
+export function CoinsChip({coins}:{coins:number}) {
+  return <div className="coins-chip" title={`${coins} ${plural(coins,"монета","монеты","монет")}`}>
+    <span aria-hidden>🪙</span><b>{coins}</b>
+  </div>;
+}
+
+export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) {
   const [state,setState]=useState<RepairState|null>(null);
   const [open,setOpen]=useState(false);
   const [note,setNote]=useState("");
@@ -54,14 +61,15 @@ export function CoinsCard({coins,onChanged}:{coins:number;onChanged:()=>void}) {
     setTimeout(()=>setNote(""),2200);
   }
 
+  // Карточка появляется, только когда есть что восстанавливать.
+  if(!state||state.missed.length===0) return null;
   return <div className="coins-card">
     <div className="coins-head">
-      <div><span>🪙</span><b>{coins}</b><small>{plural(coins,"монета","монеты","монет")}</small></div>
-      <p>По 10 за каждый отмеченный день. Пропустил день — можно выкупить за {state?.cost??50}.</p>
+      <p><b>Пропущено {state.missed.length} {plural(state.missed.length,"день","дня","дней")}.</b> Можно вернуть за {state.cost} 🪙 каждый — у тебя {coins}.</p>
     </div>
-    {state&&state.missed.length>0&&<>
+    <>
       <button className="link-row" onClick={()=>setOpen(value=>!value)}>
-        {open?"Свернуть":`Пропущено дней: ${state.missed.length}`}</button>
+        {open?"Свернуть":"Показать дни"}</button>
       {open&&<div className="missed-days">
         {state.missed.map(date=>
           <button key={date} disabled={coins<state.cost} onClick={()=>void repair(date)}>
@@ -69,7 +77,7 @@ export function CoinsCard({coins,onChanged}:{coins:number;onChanged:()=>void}) {
             <em>{state.cost} 🪙</em>
           </button>)}
       </div>}
-    </>}
+    </>
     {note&&<small className="health-status">{note}</small>}
   </div>;
 }

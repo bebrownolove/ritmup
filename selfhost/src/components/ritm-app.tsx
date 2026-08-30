@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
-import { CoinsCard, Leaderboard, Milestone } from "@/components/progress-extras";
+import { CoinsChip, Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
 
 type Tab = "today" | "stats" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; relationship?:string; status?:string; sentByMe?:boolean };
@@ -237,7 +237,7 @@ function Today() {
       {healthStatus&&<small className="health-status">{healthStatus}</small>}
     </div>
     <Milestone streak={streak}/>
-    <CoinsCard coins={coins} onChanged={refreshDay}/>
+    <RepairCard coins={coins} onChanged={refreshDay}/>
     <WeightCard date={date}/>
     <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
     <WorkoutsCard date={date}/>
@@ -378,7 +378,7 @@ function Profile({user}:{user:{name:string;email:string;username?:string|null}})
 function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>void}){return <button className="toggle-row" onClick={onClick}><span>{label}</span><i className={value?"on":""}><u/></i></button>}
 
 export function RitmApp() {
-  const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today");
+  const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today"); const [headerCoins,setHeaderCoins]=useState(0);
   const user=useMemo(()=>session.data?.user as AppUser|undefined,[session.data]);
   const userId=user?.id;
   useEffect(()=>{
@@ -390,7 +390,11 @@ export function RitmApp() {
       return jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})});
     }).catch(()=>{});
   },[userId]);
+  useEffect(()=>{
+    if(!userId) return;
+    void jsonFetch<{coins:number}>("/api/streak").then(result=>setHeaderCoins(result.coins)).catch(()=>{});
+  },[userId,tab]);
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
-  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
+  return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><CoinsChip coins={headerCoins}/><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
 }

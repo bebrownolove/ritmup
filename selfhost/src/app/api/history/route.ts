@@ -8,15 +8,19 @@ export async function GET(request: Request) {
   const raw = Number(new URL(request.url).searchParams.get("days") ?? 30);
   const days = Math.min(180, Math.max(7, Number.isFinite(raw) ? Math.round(raw) : 30));
   const result = await db.query(
-    `select to_char(d.day,'YYYY-MM-DD') as date,
+    `with zone as (select coalesce(timezone,'UTC') as tz from profiles where user_id=$1)
+     select to_char(d.day,'YYYY-MM-DD') as date,
             coalesce(l.calories_eaten,0) as "caloriesEaten",
             coalesce(l.calorie_goal,(select calorie_goal from profiles where user_id=$1),2000) as "calorieGoal",
             l.weight_kg::float8 as "weightKg",
             l.steps, coalesce(l.active_calories,0) as "activeCalories",
             coalesce(w.minutes,0) as "workoutMinutes"
        from generate_series(
-              (now() at time zone coalesce((select timezone from profiles where user_id=$1),'UTC'))::date - ($2::int - 1),
-              (now() at time zone coalesce((select timezone from profiles where user_id=$1),'UTC'))::date,
+              -- Не показываем дни до регистрации: иначе новый аккаунт видит месяц пустых столбиков.
+              greatest(
+                (now() at time zone (select tz from zone))::date - ($2::int - 1),
+                ((select "createdAt" from "user" where id=$1) at time zone (select tz from zone))::date),
+              (now() at time zone (select tz from zone))::date,
               interval '1 day') as d(day)
        left join daily_logs l on l.user_id=$1 and l.log_date=d.day
        left join (select log_date, sum(minutes)::int as minutes from workouts

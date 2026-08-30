@@ -20,16 +20,20 @@ function shortDate(date:string) {
 /** Столбики съеденного: выше нормы — красный, у нормы — янтарный. */
 function CalorieBars({days}:{days:HistoryDay[]}) {
   const peak=Math.max(...days.map(day=>Math.max(day.caloriesEaten,day.calorieGoal)),1);
-  return <div className="bars" role="img" aria-label="Калории по дням">
-    {days.map(day=>{
-      const share=day.caloriesEaten/peak*100;
-      const state=day.caloriesEaten===0?"empty":day.caloriesEaten>day.calorieGoal?"over":day.caloriesEaten>=day.calorieGoal*0.9?"close":"ok";
-      return <div key={day.date} className="bar-slot" title={`${shortDate(day.date)}: ${day.caloriesEaten} из ${day.calorieGoal} ккал`}>
-        <div className={`bar ${state}`} style={{height:`${Math.max(share,2)}%`}}/>
-        <i style={{bottom:`${day.calorieGoal/peak*100}%`}}/>
-      </div>;
-    })}
-  </div>;
+  const goal=days[days.length-1]?.calorieGoal??2000;
+  return <>
+    <div className="bars">
+      <i className="goal-line" style={{bottom:`${goal/peak*100}%`}}><em>{goal}</em></i>
+      {days.map(day=>{
+        const share=day.caloriesEaten/peak*100;
+        const state=day.caloriesEaten===0?"empty":day.caloriesEaten>day.calorieGoal?"over":day.caloriesEaten>=day.calorieGoal*0.9?"close":"ok";
+        return <div key={day.date} className="bar-slot" title={`${shortDate(day.date)}: ${day.caloriesEaten?`${day.caloriesEaten} из ${day.calorieGoal} ккал`:"нет записей"}`}>
+          <div className={`bar ${state}`} style={{height:state==="empty"?"4px":`${Math.max(share,3)}%`}}/>
+        </div>;
+      })}
+    </div>
+    <div className="bars-axis"><span>{shortDate(days[0].date)}</span><span>{shortDate(days[days.length-1].date)}</span></div>
+  </>;
 }
 
 function WeightChart({days}:{days:HistoryDay[]}) {
@@ -57,7 +61,8 @@ export function StatsScreen() {
   const averageEaten=logged.length?Math.round(logged.reduce((sum,day)=>sum+day.caloriesEaten,0)/logged.length):0;
   const withinGoal=logged.filter(day=>day.caloriesEaten<=day.calorieGoal).length;
   const minutes=days.reduce((sum,day)=>sum+day.workoutMinutes,0);
-  const steps=days.reduce((sum,day)=>sum+(day.steps??0),0);
+  const withSteps=days.filter(day=>(day.steps??0)>0);
+  const steps=withSteps.reduce((sum,day)=>sum+(day.steps??0),0);
   const weighed=days.filter(day=>day.weightKg!==null);
   const weightChange=weighed.length>1?weighed[weighed.length-1].weightKg!-weighed[0].weightKg!:null;
 
@@ -87,7 +92,7 @@ export function StatsScreen() {
 
     {steps>0&&<div className="list-card"><h3>Шаги</h3>
       <div className="stat-grid two"><div><b>{steps.toLocaleString("ru")}</b><small>всего</small></div>
-        <div><b>{Math.round(steps/days.length).toLocaleString("ru")}</b><small>в среднем за день</small></div></div></div>}
+        <div><b>{Math.round(steps/withSteps.length).toLocaleString("ru")}</b><small>в среднем за день с данными</small></div></div></div>}
 
     <div className="list-card">
       <h3>Последние дни</h3>
