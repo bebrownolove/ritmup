@@ -147,6 +147,37 @@ function InstallHint() {
   return <div className="install-hint pop-in"><span aria-hidden>📲</span><p><b>Поставь «Ритм» на домашний экран.</b> Откроется как обычное приложение, без адресной строки: кнопка «Поделиться» внизу Safari → «На экран „Домой“».</p><button onClick={hide} aria-label="Скрыть подсказку">×</button></div>;
 }
 
+function TimezoneRow() {
+  const [zone,setZone]=useState(""); const [saved,setSaved]=useState(false);
+  const zones=useMemo(()=>{
+    try {
+      const list=(Intl as unknown as {supportedValuesOf?:(key:string)=>string[]}).supportedValuesOf?.("timeZone");
+      if(list?.length) return list;
+    } catch {}
+    // Запасной список для браузеров без supportedValuesOf.
+    return ["Europe/Kaliningrad","Europe/Moscow","Asia/Yekaterinburg","Asia/Novosibirsk","Asia/Vladivostok",
+      "Europe/London","Europe/Berlin","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","UTC"];
+  },[]);
+  useEffect(()=>{void jsonFetch<{timezone?:string|null}>("/api/profile")
+    .then(profile=>setZone(profile.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone)).catch(()=>{});},[]);
+  async function change(next:string){
+    setZone(next);
+    await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone:next})}).catch(()=>{});
+    setSaved(true); setTimeout(()=>setSaved(false),1500);
+  }
+  let localTime="";
+  try { if(zone) localTime=new Intl.DateTimeFormat("ru",{timeZone:zone,day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date()); } catch {}
+  const options=zone&&!zones.includes(zone)?[zone,...zones]:zones;
+  return <div className="tz-row">
+    <label><small>Часовой пояс</small>
+      <select value={zone} onChange={event=>void change(event.target.value)}>
+        {options.map(item=><option key={item} value={item}>{item}</option>)}
+      </select>
+    </label>
+    <span className="tz-now">{localTime&&`сейчас ${localTime}`}{saved&&" · сохранено ✓"}</span>
+  </div>;
+}
+
 function HealthSetup() {
   const [token,setToken]=useState<HealthToken|null>(null); const [open,setOpen]=useState(false); const [note,setNote]=useState("");
   useEffect(()=>{jsonFetch<HealthToken>("/api/health-token").then(setToken).catch(()=>{});},[]);
@@ -155,6 +186,7 @@ function HealthSetup() {
   async function rotate(){if(!window.confirm("Старый ключ сразу перестанет работать, команду на iPhone придётся поправить. Перевыпустить?"))return;setToken(await jsonFetch<HealthToken>("/api/health-token",{method:"POST"}));setNote("Новый ключ готов");setTimeout(()=>setNote(""),1600);}
   return <div className="list-card health-setup">
     <h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>
+    <TimezoneRow/>
     <p className="muted">Сайт сам читать Apple Health не может — это запрещено в iOS. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone: раз в день, автоматически.</p>
     <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть инструкцию":"Показать инструкцию"}</button>
     {open&&<><ol className="setup-steps">
@@ -190,8 +222,12 @@ export function RitmApp() {
   const userId=user?.id;
   useEffect(()=>{
     if(!userId) return;
-    const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
-    void jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})}).catch(()=>{});
+    // Определяем пояс браузером один раз. Если человек выбрал его руками, не трогаем.
+    void jsonFetch<{timezone?:string|null}>("/api/profile").then(profile=>{
+      if(profile.timezone) return;
+      const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})});
+    }).catch(()=>{});
   },[userId]);
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
