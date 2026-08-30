@@ -16,19 +16,34 @@ function plural(count:number, one:string, few:string, many:string) {
   return many;
 }
 
-const MILESTONES=[3,7,14,30,60,100,200,365];
+const GOALS=[
+  {days:3,label:"3 дня подряд",icon:"🌱"},
+  {days:7,label:"неделя подряд",icon:"🔥"},
+  {days:14,label:"2 недели подряд",icon:"💪"},
+  {days:30,label:"месяц подряд",icon:"⭐"},
+  {days:60,label:"60 дней подряд",icon:"🚀"},
+  {days:100,label:"100 дней подряд",icon:"💎"},
+  {days:200,label:"200 дней подряд",icon:"🏅"},
+  {days:365,label:"год подряд",icon:"🏆"},
+];
 
-/** Ближайшая веха серии — чтобы было видно, ради чего не бросать. */
+/** Ближайшая понятная цель серии — без канцелярита и давления. */
 export function Milestone({streak}:{streak:number}) {
-  const next=MILESTONES.find(value=>value>streak);
-  const previous=[...MILESTONES].reverse().find(value=>value<=streak)??0;
-  if(!next) return <div className="milestone done"><span>🏆</span><p>Год без пропусков. Дальше только рекорды.</p></div>;
-  const span=next-previous;
-  const share=Math.round(((streak-previous)/span)*100);
-  return <div className="milestone">
-    <div className="milestone-head"><span>🎯</span>
-      <p>{streak===0?"Отметь сегодняшний день — серия начнётся заново."
-        :`Ещё ${next-streak} ${plural(next-streak,"день","дня","дней")} до вехи в ${next}.`}</p></div>
+  const next=GOALS.find(goal=>goal.days>streak);
+  const previous=[...GOALS].reverse().find(goal=>goal.days<=streak);
+  if(!next) return <div className="milestone done"><span>🏆</span><p><b>Целый год подряд!</b><small>Это уже твоя привычка. Просто продолжай.</small></p></div>;
+  const share=Math.round((streak/next.days)*100);
+  const remaining=next.days-streak;
+  const justReached=Boolean(previous&&previous.days===streak);
+  const title=streak===0?"Начни с одного дня"
+    :justReached?`${previous!.label[0].toUpperCase()}${previous!.label.slice(1)} — готово!`
+    :`До цели — ${remaining} ${plural(remaining,"день","дня","дней")}`;
+  const text=streak===0?"Запиши сегодня еду, вес или тренировку — этого достаточно."
+    :justReached?`Теперь можно попробовать: ${next.label}.`
+    :`${streak} ${plural(streak,"день","дня","дней")} подряд. Следующая цель — ${next.label}.`;
+  return <div className={`milestone${justReached?" reached":""}`}>
+    <div className="milestone-head"><span>{justReached?previous!.icon:next.icon}</span>
+      <p><b>{title}</b><small>{text}</small></p></div>
     <div className="milestone-bar"><i style={{width:`${Math.max(share,3)}%`}}/></div>
   </div>;
 }
@@ -37,7 +52,7 @@ type RepairState={cost:number;coins:number;missed:string[]};
 
 /** Монеты в шапке: цифра всегда на виду, но места не занимает. */
 export function CoinsChip({coins}:{coins:number}) {
-  return <div className="coins-chip" title={`${coins} ${plural(coins,"монета","монеты","монет")}`}>
+  return <div className="coins-chip" title={`${coins} ${plural(coins,"очко","очка","очков")}`}>
     <span aria-hidden>🪙</span><b>{coins}</b>
   </div>;
 }
@@ -53,10 +68,10 @@ export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) 
     setNote("");
     try{
       await api("/api/streak-repair",{method:"POST",body:JSON.stringify({date})});
-      setNote("День восстановлен ✓"); onChanged(); load();
+      setNote("День снова в серии ✓"); onChanged(); load();
     }catch(error){
       const status=(error as {status?:number}).status;
-      setNote(status===402?"Не хватает монет":"Не получилось восстановить день");
+      setNote(status===402?"Пока не хватает очков":"Не получилось восстановить день");
     }
     setTimeout(()=>setNote(""),2200);
   }
@@ -65,11 +80,11 @@ export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) 
   if(!state||state.missed.length===0) return null;
   return <div className="coins-card">
     <div className="coins-head">
-      <p><b>Пропущено {state.missed.length} {plural(state.missed.length,"день","дня","дней")}.</b> Можно вернуть за {state.cost} 🪙 каждый — у тебя {coins}.</p>
+      <p><b>Хочешь продолжить прошлую серию?</b> Можно восстановить {state.missed.length} {plural(state.missed.length,"день","дня","дней")} — по {state.cost} очков.</p>
     </div>
     <>
       <button className="link-row" onClick={()=>setOpen(value=>!value)}>
-        {open?"Свернуть":"Показать дни"}</button>
+        {open?"Скрыть":"Выбрать день"}</button>
       {open&&<div className="missed-days">
         {state.missed.map(date=>
           <button key={date} disabled={coins<state.cost} onClick={()=>void repair(date)}>
@@ -87,14 +102,14 @@ type Player={id:string;name:string;username:string|null;isSelf:boolean;streak:nu
 export function Leaderboard() {
   const [rows,setRows]=useState<Player[]>([]);
   useEffect(()=>{void api<Player[]>("/api/leaderboard").then(setRows).catch(()=>{});},[]);
-  if(rows.length<=1) return <div className="list-card"><h3>Рейтинг</h3>
-    <div className="empty"><span>🏅</span><p>Добавь друзей — появится таблица по сериям</p></div></div>;
+  if(rows.length<=1) return <div className="list-card"><h3>Серии друзей</h3>
+    <div className="empty"><span>🏅</span><p>Добавь друзей — сможете поддерживать друг друга</p></div></div>;
   return <div className="list-card">
-    <h3>Рейтинг по сериям</h3>
+    <h3>Кто сколько дней подряд</h3>
     {rows.map((player,index)=>
       <div className={`rank-row${player.isSelf?" me":""}`} key={player.id}>
         <span className="place">{index===0?"🥇":index===1?"🥈":index===2?"🥉":index+1}</span>
-        <div><b>{player.name}</b><small>@{player.username??"без-ника"}</small></div>
+        <div><b>{player.name}</b><small>@{player.username??"без ника"}</small></div>
         <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
         <i>{player.workoutMinutes?`${player.workoutMinutes} мин`:""}</i>
       </div>)}

@@ -323,3 +323,9 @@ html,body,.loading { background:var(--page); }
   .bmi-labels b { font-size:8px!important; }
   .bmi-labels span { font-size:8px; }
 }
+
+.milestone-head p { display:grid; gap:2px; }
+.milestone-head p b { font-size:14px; }
+.milestone-head p small { color:var(--muted); font-size:12px; line-height:1.4; }
+.milestone.reached { background:var(--warning-soft); border-color:#ffe0a5; }
+.milestone.reached .milestone-head>span { animation:tab-bounce .5s cubic-bezier(.2,.9,.3,1.25); }

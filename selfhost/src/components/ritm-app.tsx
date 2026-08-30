@@ -191,6 +191,16 @@ function Today() {
   const healthFreshness=health.healthSyncedAt
     ? `Обновлено в ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})} ✓`
     : "Пока не подключено";
+  const caloriesLeft=Math.max(0,goal-total);
+  const dayMessage=total===0
+    ? {title:"Начни с первой записи",text:"Добавь то, что уже съел. Не обязательно заполнять всё сразу."}
+    : ringState==="over"
+      ? {title:"Сегодня выше ориентира",text:"Ничего страшного. Один день ничего не решает — завтра просто продолжим."}
+      : ringState==="close"
+        ? {title:"Почти готово",text:`До твоего ориентира осталось ${caloriesLeft} ккал.`}
+        : percent<50
+          ? {title:"Хорошее начало",text:`На сегодня осталось примерно ${caloriesLeft} ккал.`}
+          : {title:"Всё идёт по плану",text:`На сегодня осталось примерно ${caloriesLeft} ккал.`};
   // Записи живут на сервере. В localStorage их держать нельзя: при уходе со вкладки
   // компонент размонтируется, и сохранение пустого списка затирало данные.
   useEffect(()=>{void jsonFetch<Entry[]>(`/api/food-entries?date=${date}`).then(setEntries).catch(()=>{});},[date]);
@@ -235,7 +245,7 @@ function Today() {
   }
   return <section className="screen slide-up">
     <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div><div className="streak"><span>🔥</span><b>{streak}</b><small>{plural(streak,"день","дня","дней")}</small></div></div>
-    <div className="progress-card"><div className={`ring ${ringState}`} style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{ringState==="over"?`Перебор на ${total-goal} ккал`:ringState==="close"?"Норма почти выбрана":percent<50?"Отличное начало":"Идёшь ровно"}</h3><p>{ringState==="over"?"Это не провал — просто учитывай при завтрашнем планировании.":"Добавляй еду по мере дня. Ничего подтверждать вечером не нужно."}</p></div></div>
+    <div className="progress-card"><div className={`ring ${ringState}`} style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{dayMessage.title}</h3><p>{dayMessage.text}</p></div></div>
     <Milestone streak={streak}/>
     <div className="day-switch" role="tablist" aria-label="Раздел дневника">
       <button role="tab" className={section==="food"?"active":""} aria-selected={section==="food"} onClick={()=>setSection("food")}><span>🍽️</span>Питание</button>
@@ -244,7 +254,7 @@ function Today() {
     </div>
     {section==="food"&&<div className="day-panel slide-up">
       <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
-      <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Первая запись запустит серию дня</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
+      <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Запиши первый приём пищи — дальше будет проще</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
       <RepairCard coins={coins} onChanged={refreshDay}/>
     </div>}
     {section==="movement"&&<div className="day-panel slide-up">
@@ -275,7 +285,7 @@ function Friends() {
     {incoming.length>0&&<div className="list-card"><h3>Заявки</h3>{incoming.map(p=><PersonRow key={p.id} person={p} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
     <div className="list-card"><h3>Твои друзья · {accepted.length}</h3>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
     <Leaderboard/>
-    <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> тренировался {event.payload.minutes??0} мин</>:<><b>{event.name}</b> держит серию уже {event.payload.days??1} дн.</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся безопасные достижения друзей</p></div>}</div>
+    <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> добавил тренировку · {event.payload.minutes??0} мин</>:<><b>{event.name}</b> уже {event.payload.days??1} {plural(event.payload.days??1,"день","дня","дней")} подряд</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся успехи друзей</p></div>}</div>
   </section>;
 }
 

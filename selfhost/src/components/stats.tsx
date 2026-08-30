@@ -77,7 +77,7 @@ export function StatsScreen() {
   return <section className="screen slide-up">
     <div className="hero-row"><div><p className="eyebrow">СТАТИСТИКА</p><h2>Как идут дела</h2></div>
       <div className="range-switch">{[7,30,90].map(value=>
-        <button key={value} className={range===value?"active":""} onClick={()=>setRange(value)}>{value} дн.</button>)}</div>
+        <button key={value} className={range===value?"active":""} onClick={()=>setRange(value)}>{value} дней</button>)}</div>
     </div>
 
     <div className="stat-grid">
@@ -90,7 +90,7 @@ export function StatsScreen() {
     <div className="list-card">
       <h3>Калории по дням</h3>
       <CalorieBars days={days}/>
-      <p className="muted small">Пунктир — твоя норма. Красные столбики — дни с перебором.</p>
+      <p className="muted small">Пунктир — твой ориентир. Коралловые столбики — дни выше него.</p>
     </div>
 
     <div className="list-card">
