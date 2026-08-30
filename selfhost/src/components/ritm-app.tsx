@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 type Tab = "today" | "friends" | "profile";
@@ -10,7 +10,7 @@ type Entry = { id:string; title:string; calories:number };
 type WeightPoint = { date:string; weightKg:number };
 type Workout = { id:string; title:string; minutes:number; calories:number|null; date:string };
 type AppUser = { id:string; name:string; email:string; username?:string|null };
-type HealthSnapshot = { activeCalories:number; steps?:number|null; exerciseMinutes?:number|null; weightKg:number|null; healthSyncedAt?:string|null };
+type HealthSnapshot = { calorieGoal?:number; activeCalories:number; steps?:number|null; exerciseMinutes?:number|null; weightKg:number|null; healthSyncedAt?:string|null };
 type HealthToken = { token:string; lastUsedAt:string|null };
 type HealthKitDetail = { date?:string; activeCalories?:number; weightKg?:number|null; error?:string };
 
@@ -19,6 +19,15 @@ declare global {
     ritmHealthKitAvailable?:boolean;
     webkit?:{messageHandlers?:{ritmHealth?:{postMessage:(message:{action:string})=>void}}};
   }
+}
+
+/** 1 день, 2 дня, 5 дней — иначе на экране висит «1 дней». */
+function plural(count:number, one:string, few:string, many:string) {
+  const tens=count%100, units=count%10;
+  if(tens>10&&tens<20) return many;
+  if(units===1) return one;
+  if(units>=2&&units<=4) return few;
+  return many;
 }
 
 function todayKey(date=new Date()) {
@@ -166,11 +175,21 @@ function Today() {
   const [busy,setBusy]=useState(false);
   const [health,setHealth]=useState<HealthSnapshot>({activeCalories:0,steps:null,weightKg:null});
   const [healthAvailable,setHealthAvailable]=useState(false); const [healthStatus,setHealthStatus]=useState(""); const [healthBusy,setHealthBusy]=useState(false);
-  const goal=2000; const total=entries.reduce((sum,item)=>sum+item.calories,0); const percent=Math.min(100,Math.round(total/goal*100));
+  const [streak,setStreak]=useState(0);
+  const goal=health.calorieGoal??2000;
+  const total=entries.reduce((sum,item)=>sum+item.calories,0);
+  const ratio=total/goal;
+  const percent=Math.min(100,Math.round(ratio*100));
+  // Цель здесь — предел, а не достижение: перебор не должен выглядеть победой.
+  const ringState=ratio>1?"over":ratio>=0.9?"close":"ok";
   // Записи живут на сервере. В localStorage их держать нельзя: при уходе со вкладки
   // компонент размонтируется, и сохранение пустого списка затирало данные.
   useEffect(()=>{void jsonFetch<Entry[]>(`/api/food-entries?date=${date}`).then(setEntries).catch(()=>{});},[date]);
-  useEffect(()=>{void jsonFetch<HealthSnapshot>(`/api/daily-log?date=${date}`).then(setHealth).catch(()=>{});},[date]);
+  const refreshDay=useCallback(()=>{
+    void jsonFetch<HealthSnapshot>(`/api/daily-log?date=${date}`).then(setHealth).catch(()=>{});
+    void jsonFetch<{days:number}>("/api/streak").then(result=>setStreak(result.days)).catch(()=>{});
+  },[date]);
+  useEffect(()=>{refreshDay();},[refreshDay]);
   useEffect(()=>{
     const detect=()=>setHealthAvailable(Boolean(window.ritmHealthKitAvailable&&window.webkit?.messageHandlers?.ritmHealth));
     const receive=(event:Event)=>{void (async()=>{
@@ -195,7 +214,8 @@ function Today() {
       const next=[...entries,saved];
       setEntries(next); setTitle(""); setCalories("");
       const eaten=next.reduce((sum,item)=>sum+item.calories,0);
-      void jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten,calorieGoal:goal,streak:1})}).catch(()=>{});
+      await jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten})}).catch(()=>{});
+      refreshDay();
     }catch{}
     setBusy(false);
   }
@@ -204,11 +224,12 @@ function Today() {
     setEntries(next);
     await jsonFetch(`/api/food-entries?id=${encodeURIComponent(id)}`,{method:"DELETE"}).catch(()=>{});
     const eaten=next.reduce((sum,item)=>sum+item.calories,0);
-    void jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten,calorieGoal:goal,streak:next.length?1:0})}).catch(()=>{});
+    await jsonFetch("/api/daily-log",{method:"POST",body:JSON.stringify({date,caloriesEaten:eaten})}).catch(()=>{});
+    refreshDay();
   }
   return <section className="screen slide-up">
-    <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div><div className="streak"><span>🔥</span><b>{entries.length?1:0}</b><small>дней</small></div></div>
-    <div className="progress-card"><div className="ring" style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{total>goal?"Цель дня превышена":percent<50?"Отличное начало":percent<90?"Уже близко":"Цель дня рядом!"}</h3><p>Добавляй еду по мере дня. Ничего подтверждать вечером не нужно.</p></div></div>
+    <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div><div className="streak"><span>🔥</span><b>{streak}</b><small>{plural(streak,"день","дня","дней")}</small></div></div>
+    <div className="progress-card"><div className={`ring ${ringState}`} style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{ringState==="over"?`Перебор на ${total-goal} ккал`:ringState==="close"?"Норма почти выбрана":percent<50?"Отличное начало":"Идёшь ровно"}</h3><p>{ringState==="over"?"Это не провал — просто учитывай при завтрашнем планировании.":"Добавляй еду по мере дня. Ничего подтверждать вечером не нужно."}</p></div></div>
     <div className="health-card">
       <div className="health-title"><span aria-hidden>❤️</span><div><h3>Apple Health</h3><p>{health.healthSyncedAt?`Обновлено ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})}`:"Пока не подключено"}</p></div></div>
       <div className="health-values"><div><b>{health.activeCalories||"—"}</b><small>активных ккал</small></div><div><b>{health.steps??"—"}</b><small>шагов</small></div><div><b>{health.weightKg?health.weightKg.toFixed(1):"—"}</b><small>вес, кг</small></div></div>
@@ -284,6 +305,23 @@ function TimezoneRow() {
   </div>;
 }
 
+function GoalRow() {
+  const [goal,setGoal]=useState(""); const [saved,setSaved]=useState(false);
+  useEffect(()=>{void jsonFetch<{calorieGoal?:number}>("/api/profile")
+    .then(profile=>setGoal(String(profile.calorieGoal??2000))).catch(()=>{});},[]);
+  async function save(event:FormEvent){
+    event.preventDefault();
+    const value=Number(goal);
+    if(!value||value<500||value>10000)return;
+    await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({calorieGoal:value})}).catch(()=>{});
+    setSaved(true); setTimeout(()=>setSaved(false),1600);
+  }
+  return <form className="goal-row" onSubmit={save}>
+    <label>Дневная норма калорий<input value={goal} onChange={event=>setGoal(event.target.value)} type="number" min="500" max="10000" step="50"/></label>
+    <button disabled={!goal}>{saved?"Сохранено ✓":"Сохранить"}</button>
+  </form>;
+}
+
 function HealthSetup() {
   const shortcutUrl=process.env.NEXT_PUBLIC_HEALTH_SHORTCUT_URL;
   const [token,setToken]=useState<HealthToken|null>(null); const [open,setOpen]=useState(false); const [note,setNote]=useState("");
@@ -328,6 +366,7 @@ function Profile({user}:{user:{name:string;email:string;username?:string|null}})
   useEffect(()=>{jsonFetch<typeof settings>("/api/profile").then(v=>setSettings(s=>({...s,...v})));},[]);
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
   return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><div className="big-avatar">{user.name.slice(0,1).toUpperCase()}</div><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
+    <div className="list-card settings"><h3>Норма</h3><GoalRow/></div>
     <div className="list-card settings"><h3>Приватность активности {saved&&<small>Сохранено ✓</small>}</h3><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div>
     <HealthSetup/>
     <button className="danger" onClick={()=>authClient.signOut()}>Выйти из аккаунта</button>

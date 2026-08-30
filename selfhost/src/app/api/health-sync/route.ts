@@ -28,7 +28,7 @@ export async function POST(request: Request) {
        from profiles where user_id=$1`, [userId])).rows[0].today;
   const result = await db.query(`insert into daily_logs
     (user_id,log_date,calories_eaten,active_calories,calorie_goal,steps,exercise_minutes,weight_kg,health_synced_at)
-    values ($1,$2,0,coalesce($3,0),2000,$4,$5,$6,now())
+    values ($1,$2,0,coalesce($3,0),coalesce((select calorie_goal from profiles where user_id=$1),2000),$4,$5,$6,now())
     on conflict (user_id,log_date) do update set
       active_calories=coalesce($3,daily_logs.active_calories),
       steps=coalesce($4,daily_logs.steps),
