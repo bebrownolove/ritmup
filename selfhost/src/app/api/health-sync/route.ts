@@ -4,7 +4,9 @@ import { resolveHealthUserId } from "@/lib/health-auth";
 
 // Метрики опциональны: команда Shortcuts может присылать только шаги или только вес.
 const schema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Дата не обязательна: без неё берём сегодняшний день в часовом поясе пользователя,
+  // чтобы команде на iPhone не приходилось её форматировать.
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   activeCalories: z.coerce.number().int().min(0).max(20000).nullish(),
   steps: z.coerce.number().int().min(0).max(200000).nullish(),
   exerciseMinutes: z.coerce.number().int().min(0).max(1440).nullish(),
@@ -19,6 +21,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "invalid_health_snapshot" }, { status: 400 });
   const snapshot = parsed.data;
   await db.query(`insert into profiles(user_id) values($1) on conflict(user_id) do nothing`, [userId]);
+  const day = snapshot.date ?? (await db.query<{ today: string }>(
+    `select to_char((now() at time zone coalesce(timezone,'UTC'))::date,'YYYY-MM-DD') as today
+       from profiles where user_id=$1`, [userId])).rows[0].today;
   const result = await db.query(`insert into daily_logs
     (user_id,log_date,calories_eaten,active_calories,calorie_goal,steps,exercise_minutes,weight_kg,health_synced_at)
     values ($1,$2,0,coalesce($3,0),2000,$4,$5,$6,now())
@@ -30,7 +35,7 @@ export async function POST(request: Request) {
       health_synced_at=now(), updated_at=now()
     returning active_calories as "activeCalories", steps, exercise_minutes as "exerciseMinutes",
       weight_kg::float8 as "weightKg", health_synced_at as "healthSyncedAt"`,
-    [userId, snapshot.date, snapshot.activeCalories ?? null, snapshot.steps ?? null,
+    [userId, day, snapshot.activeCalories ?? null, snapshot.steps ?? null,
       snapshot.exerciseMinutes ?? null, snapshot.weightKg ?? null]);
   return Response.json({ ok: true, ...result.rows[0] });
 }

@@ -156,17 +156,14 @@ function HealthSetup() {
   return <div className="list-card health-setup">
     <h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>
     <p className="muted">Сайт сам читать Apple Health не может — это запрещено в iOS. Данные присылает бесплатная команда «Быстрые команды» с твоего iPhone: раз в день, автоматически.</p>
-    <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть инструкцию":"Показать инструкцию (2 минуты)"}</button>
-    {open&&<ol className="setup-steps">
-      <li>На iPhone открой приложение <b>«Быстрые команды»</b> → вкладка «Команды» → <b>+</b>.</li>
-      <li>Добавь действие <b>«Найти образцы Health»</b>. Тип — <b>«Активная энергия»</b>, фильтр <b>«Дата начала — сегодня»</b>, статистика — <b>«Сумма»</b>.</li>
-      <li>Повтори такое же действие для <b>«Шаги»</b> и (если хочешь) для <b>«Вес»</b> с последним значением.</li>
-      <li>Добавь действие <b>«Форматировать дату»</b> для текущей даты с форматом <b>yyyy-MM-dd</b>.</li>
-      <li>Добавь <b>«Загрузить содержимое URL»</b>. Адрес: <code>{endpoint}</code>, метод <b>POST</b>.</li>
-      <li>В заголовках: <b>Authorization</b> со значением <b>Bearer <i>ключ ниже</i></b>.</li>
-      <li>Тело запроса — <b>JSON</b> с полями: <code>date</code> (текст, отформатированная дата), <code>activeCalories</code>, <code>steps</code>, <code>weightKg</code> (числа).</li>
-      <li>Сохрани команду, затем во вкладке <b>«Автоматизация»</b> поставь запуск <b>каждый день в 23:50</b> и включи «Запускать сразу».</li>
-    </ol>}
+    <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть инструкцию":"Показать инструкцию"}</button>
+    {open&&<><ol className="setup-steps">
+      <li>На iPhone открой <b>«Быстрые команды»</b> и нажми <b>+</b>.</li>
+      <li>Добавь действие <b>«Найти образцы Health»</b>. Внутри выбери тип <b>«Активная энергия»</b>, фильтр <b>«Дата начала — сегодня»</b> и включи <b>«Статистика» → «Сумма»</b>.</li>
+      <li>Добавь действие <b>«Загрузить содержимое URL»</b> с адресом и ключом из полей ниже. Метод — <b>POST</b>, заголовок <b>Authorization</b>, тело — <b>JSON</b> с одним полем <code>activeCalories</code>, в значение которого подставь результат первого действия.</li>
+      <li>Сохрани. Во вкладке <b>«Автоматизация»</b> поставь запуск <b>каждый день в 23:50</b> и включи <b>«Запускать сразу»</b>.</li>
+    </ol>
+    <p className="setup-note">Дату присылать не нужно — сервер знает твой часовой пояс и сам поймёт, за какой день числа. Шаги и вес добавляются позже такими же действиями «Найти образцы Health» с полями <code>steps</code> и <code>weightKg</code>.</p></>}
     <div className="token-row"><div><small>Адрес</small><code>{endpoint}</code></div><button onClick={()=>copy(endpoint,"Адрес")}>Копировать</button></div>
     <div className="token-row"><div><small>Личный ключ</small><code>{token?`Bearer ${token.token}`:"…"}</code></div><button disabled={!token} onClick={()=>token&&copy(`Bearer ${token.token}`,"Ключ")}>Копировать</button></div>
     <p className="privacy-note">Ключ открывает доступ только к отправке твоих дневных чисел. Никому его не пересылай — если утёк, перевыпусти.</p>
@@ -190,6 +187,12 @@ function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>vo
 export function RitmApp() {
   const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today");
   const user=useMemo(()=>session.data?.user as AppUser|undefined,[session.data]);
+  const userId=user?.id;
+  useEffect(()=>{
+    if(!userId) return;
+    const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    void jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})}).catch(()=>{});
+  },[userId]);
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
   return <main className="app-shell"><header><div className="brand"><span>🔥</span>Ритм</div><div className="mini-user"><span>{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>@{user.username??"ник"}</small></div></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today userId={user.id}/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
