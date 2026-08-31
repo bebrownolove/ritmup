@@ -104,18 +104,18 @@ type Player={id:string;name:string;username:string|null;avatarConfig?:Partial<Av
 export function Leaderboard() {
   const [rows,setRows]=useState<Player[]>([]);
   useEffect(()=>{void api<Player[]>("/api/leaderboard").then(setRows).catch(()=>{});},[]);
-  if(rows.length<=1) return <div className="list-card"><h3>Серии друзей</h3>
-    <div className="empty"><span>🏅</span><p>Добавь друзей — сможете поддерживать друг друга</p></div></div>;
+  if(rows.length===0) return <div className="list-card"><h3>Общий рейтинг</h3>
+    <div className="empty"><span>🏅</span><p>Пока в рейтинге никого нет</p></div></div>;
   return <div className="list-card">
-    <h3>Кто сколько дней подряд</h3>
+    <h3>Общий рейтинг <small>{rows.length} участников</small></h3>
     {rows.map((player,index)=>
       <div className={`rank-row${player.isSelf?" me":""}`} key={player.id}>
         <span className="place">{index===0?"🥇":index===1?"🥈":index===2?"🥉":index+1}</span>
         <CharacterAvatar value={player.avatarConfig} size="small" label={`Персонаж ${player.name}`}/>
         <div><b>{player.name}</b><small>@{player.username??"без ника"}</small></div>
         <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
-        <i>{player.workoutMinutes?`${player.workoutMinutes} мин`:""}</i>
+        <i>{player.workoutMinutes===null?"тренировки скрыты":`${player.workoutMinutes} мин`}</i>
       </div>)}
-    <p className="muted small">Считаются только те, кто разрешил показывать серию. Тренировки — за последние 7 дней.</p>
+    <p className="muted small">Здесь все пользователи Ритма. Если человек скрыл серию или тренировки, вместо числа показывается «скрыто».</p>
   </div>;
 }

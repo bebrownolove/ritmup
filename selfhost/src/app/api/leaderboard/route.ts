@@ -5,8 +5,8 @@ import { currentStreak } from "@/lib/streak";
 type Row = { id: string; name: string; username: string | null; avatarConfig:unknown; shareStreak: boolean; shareWorkouts: boolean };
 
 /**
- * Таблица среди друзей. Показываем только то, что человек разрешил показывать:
- * закрытая серия или тренировки просто не попадают в рейтинг.
+ * Общий рейтинг всех зарегистрированных людей. Показываем только то, что
+ * человек разрешил показывать публично.
  */
 export async function GET(request: Request) {
   const user = await requireUser(request);
@@ -16,10 +16,8 @@ export async function GET(request: Request) {
             coalesce(p.share_streak,true) as "shareStreak",
             coalesce(p.share_workouts,true) as "shareWorkouts"
        from "user" u left join profiles p on p.user_id=u.id
-      where u.id=$1 or exists (
-        select 1 from friendships f where f.status='accepted' and
-        ((f.requester_id=$1 and f.addressee_id=u.id) or (f.addressee_id=$1 and f.requester_id=u.id)))`,
-    [user.id]);
+      order by u.name asc`,
+    []);
 
   const rows = await Promise.all(people.rows.map(async person => {
     const isSelf = person.id === user.id;

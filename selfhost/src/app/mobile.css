@@ -424,6 +424,13 @@ html,body,.loading { background:var(--page); }
 .avatar-options button { display:grid; place-items:center; gap:5px; min-width:0; min-height:70px; padding:7px 4px; border:2px solid var(--line); border-radius:13px; background:var(--card); color:var(--ink); }.avatar-options button i{display:grid;place-items:center;width:31px;height:31px;border-radius:10px;font-style:normal;font-size:17px}.avatar-options button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:10px;font-weight:750;white-space:nowrap}.avatar-options button.active{border-color:var(--green);background:var(--green-soft);box-shadow:0 2px 0 var(--green-dark)}
 .avatar-save { width:100%; min-height:48px; }
 .rank-row { grid-template-columns:34px 42px 1fr auto auto; }
+.person.with-metrics { display:grid; grid-template-columns:42px 1fr auto; }
+.person.with-metrics>.character-avatar { grid-row:1; }
+.friend-metrics { grid-column:1/-1; display:flex!important; flex-wrap:wrap; gap:6px; padding-top:8px; }
+.friend-metrics span { padding:6px 9px; border-radius:10px; background:var(--surface-soft); color:var(--muted); font-size:11px; white-space:nowrap; }
+.friend-metrics b { color:var(--ink); }
+.privacy-section-title { margin:14px 0 2px; color:var(--green-dark); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+.privacy-section-title.public { margin-top:22px; }
 
 @media(max-width:420px){
   .app-shell header{padding-left:14px;padding-right:14px}.header-status{gap:5px}.header-streak{padding:5px 8px}.header-status .coins-chip{padding:6px 8px}.header-status .avatar-small{--avatar-size:38px}.avatar-options{grid-template-columns:repeat(3,1fr)}.avatar-editor-preview{gap:14px;padding:14px}.avatar-large{--avatar-size:132px}.rank-row{grid-template-columns:30px 38px 1fr auto}.rank-row>i{display:none}
