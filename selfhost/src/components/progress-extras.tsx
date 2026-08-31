@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CharacterAvatar } from "@/components/avatar-editor";
+import type { AvatarConfig } from "@/lib/avatar";
 
 async function api<T>(url:string, init?:RequestInit):Promise<T> {
   const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}});
@@ -97,7 +99,7 @@ export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) 
   </div>;
 }
 
-type Player={id:string;name:string;username:string|null;isSelf:boolean;streak:number|null;workoutMinutes:number|null};
+type Player={id:string;name:string;username:string|null;avatarConfig?:Partial<AvatarConfig>|null;isSelf:boolean;streak:number|null;workoutMinutes:number|null};
 
 export function Leaderboard() {
   const [rows,setRows]=useState<Player[]>([]);
@@ -109,6 +111,7 @@ export function Leaderboard() {
     {rows.map((player,index)=>
       <div className={`rank-row${player.isSelf?" me":""}`} key={player.id}>
         <span className="place">{index===0?"🥇":index===1?"🥈":index===2?"🥉":index+1}</span>
+        <CharacterAvatar value={player.avatarConfig} size="small" label={`Персонаж ${player.name}`}/>
         <div><b>{player.name}</b><small>@{player.username??"без ника"}</small></div>
         <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
         <i>{player.workoutMinutes?`${player.workoutMinutes} мин`:""}</i>

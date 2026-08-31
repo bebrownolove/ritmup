@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length < 2) return Response.json([]);
   const result = await db.query(
-    `select u.id, u.name, u.username, u.image,
+    `select u.id, u.name, u.username, u.image, p.avatar_config as "avatarConfig",
        case when f.status='accepted' then 'friends' when f.requester_id=$1 then 'outgoing'
             when f.addressee_id=$1 then 'incoming' else 'none' end as relationship
      from "user" u left join profiles p on p.user_id=u.id

@@ -6,8 +6,9 @@ export async function GET(request: Request) {
   const user = await requireUser(request);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const result = await db.query(
-    `select u.id,u.name,u.username,u.image,f.status,f.requester_id=$1 as "sentByMe",f.created_at as "createdAt"
+    `select u.id,u.name,u.username,u.image,p.avatar_config as "avatarConfig",f.status,f.requester_id=$1 as "sentByMe",f.created_at as "createdAt"
        from friendships f join "user" u on u.id=case when f.requester_id=$1 then f.addressee_id else f.requester_id end
+       left join profiles p on p.user_id=u.id
       where f.requester_id=$1 or f.addressee_id=$1 order by f.created_at desc`, [user.id]);
   return Response.json(result.rows);
 }

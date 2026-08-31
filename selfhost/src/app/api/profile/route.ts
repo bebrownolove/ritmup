@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { AVATAR_VALUES, normalizeAvatar } from "@/lib/avatar";
+
+const avatarSchema=z.object({
+  skin:z.enum(AVATAR_VALUES.skin),head:z.enum(AVATAR_VALUES.head),hair:z.enum(AVATAR_VALUES.hair),hairColor:z.enum(AVATAR_VALUES.hairColor),
+  eyes:z.enum(AVATAR_VALUES.eyes),mouth:z.enum(AVATAR_VALUES.mouth),outfit:z.enum(AVATAR_VALUES.outfit),headwear:z.enum(AVATAR_VALUES.headwear),
+  glasses:z.enum(AVATAR_VALUES.glasses),piercing:z.enum(AVATAR_VALUES.piercing),tattoo:z.enum(AVATAR_VALUES.tattoo),accessory:z.enum(AVATAR_VALUES.accessory),background:z.enum(AVATAR_VALUES.background),
+});
 
 const patchSchema = z.object({
   bio: z.string().trim().max(160).optional(),
@@ -16,6 +23,7 @@ const patchSchema = z.object({
   activityLevel: z.enum(["low","light","medium","high","athlete"]).optional(),
   targetWeightKg: z.coerce.number().min(20).max(400).nullish(),
   goalDirection: z.enum(["lose","keep","gain"]).optional(),
+  avatarConfig: avatarSchema.optional(),
   onboardingCompleted: z.boolean().optional(),
 });
 
@@ -34,7 +42,7 @@ export async function GET(request: Request) {
             share_goal_hits as "shareGoalHits", share_workouts as "shareWorkouts", timezone, calorie_goal as "calorieGoal",
             height_cm as "heightCm", sex, birth_year as "birthYear",
             activity_level as "activityLevel", target_weight_kg::float8 as "targetWeightKg",
-            goal_direction as "goalDirection", coins,
+            goal_direction as "goalDirection", avatar_config as "avatarConfig", coins,
             onboarding_completed as "onboardingCompleted"
        from profiles where user_id = $1`, [user.id]);
   return Response.json(result.rows[0]);
@@ -50,8 +58,8 @@ export async function PATCH(request: Request) {
   const value = parsed.data;
   await db.query(
     `insert into profiles (user_id, bio, is_discoverable, share_streak, share_goal_hits, share_workouts, timezone, calorie_goal,
-       height_cm, sex, birth_year, activity_level, target_weight_kg, onboarding_completed, goal_direction)
-     values ($1, $2, $3, $4, $5, $6, $7, coalesce($8,2000), $9, $10, $11, coalesce($12,'light'), $13, coalesce($14,false), $15)
+       height_cm, sex, birth_year, activity_level, target_weight_kg, onboarding_completed, goal_direction, avatar_config)
+     values ($1, $2, $3, $4, $5, $6, $7, coalesce($8,2000), $9, $10, $11, coalesce($12,'light'), $13, coalesce($14,false), $15, coalesce($16::jsonb,'{}'::jsonb))
      on conflict (user_id) do update set bio=excluded.bio, is_discoverable=excluded.is_discoverable,
        share_streak=excluded.share_streak, share_goal_hits=excluded.share_goal_hits,
        share_workouts=excluded.share_workouts, timezone=excluded.timezone,
@@ -61,14 +69,16 @@ export async function PATCH(request: Request) {
        activity_level=coalesce($12,profiles.activity_level),
        target_weight_kg=coalesce($13,profiles.target_weight_kg),
        onboarding_completed=coalesce($14,profiles.onboarding_completed),
-       goal_direction=coalesce($15,profiles.goal_direction)`,
+       goal_direction=coalesce($15,profiles.goal_direction),
+       avatar_config=coalesce($16::jsonb,profiles.avatar_config)`,
     [user.id, value.bio ?? old.bio ?? "", value.isDiscoverable ?? old.is_discoverable ?? true,
       value.shareStreak ?? old.share_streak ?? true, value.shareGoalHits ?? old.share_goal_hits ?? true,
       value.shareWorkouts ?? old.share_workouts ?? true,
       validTimezone(value.timezone) ?? old.timezone ?? null,
       value.calorieGoal ?? null, value.heightCm ?? null, value.sex ?? null,
       value.birthYear ?? null, value.activityLevel ?? null, value.targetWeightKg ?? null,
-      value.onboardingCompleted ?? null, value.goalDirection ?? null]);
+      value.onboardingCompleted ?? null, value.goalDirection ?? null,
+      value.avatarConfig ? JSON.stringify(normalizeAvatar(value.avatarConfig)) : null]);
   // Новая норма должна сразу появиться на экране «Сегодня». Раньше дневная
   // запись продолжала хранить старые 2000 ккал и перекрывала профиль.
   if (value.calorieGoal !== undefined) {
