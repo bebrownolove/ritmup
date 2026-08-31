@@ -388,14 +388,14 @@ const goalDirections:{key:GoalDirection;icon:string;title:string;text:string}[] 
 
 function GoalRow() {
   const [goal,setGoal]=useState(""); const [direction,setDirection]=useState<GoalDirection>("keep");
-  const [profile,setProfile]=useState<{heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string}>({});
+  const [profile,setProfile]=useState<{heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string;targetWeightKg?:number|null;goalDirection?:GoalDirection|null}>({});
   const [weight,setWeight]=useState<number|null>(null); const [saved,setSaved]=useState(false); const [choosing,setChoosing]=useState(false); const [note,setNote]=useState("");
   useEffect(()=>{void Promise.all([
-    jsonFetch<{calorieGoal?:number;goalDirection?:GoalDirection;heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string}>("/api/profile"),
+    jsonFetch<{calorieGoal?:number;goalDirection?:GoalDirection|null;heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string;targetWeightKg?:number|null}>("/api/profile"),
     jsonFetch<{weightKg:number}[]>("/api/weight"),
-  ]).then(([current,history])=>{setGoal(String(current.calorieGoal??2000));setDirection(current.goalDirection??"keep");setProfile(current);setWeight(history.at(-1)?.weightKg??null);}).catch(()=>{});},[]);
+  ]).then(([current,history])=>{const latest=history.at(-1)?.weightKg??null;const inferred=!current.targetWeightKg||!latest?"keep":current.targetWeightKg<latest-0.3?"lose":current.targetWeightKg>latest+0.3?"gain":"keep";setGoal(String(current.calorieGoal??2000));setDirection(current.goalDirection??inferred);setProfile(current);setWeight(latest);}).catch(()=>{});},[]);
   async function choose(next:GoalDirection){
-    if(choosing||next===direction)return;
+    if(choosing||(next===direction&&profile.goalDirection===next))return;
     const previous=direction;
     setDirection(next); setNote("");
     setChoosing(true);
@@ -408,6 +408,7 @@ function GoalRow() {
     try {
       await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({goalDirection:next,...(nextGoal?{calorieGoal:nextGoal}:{})})});
       if(nextGoal)setGoal(String(nextGoal));
+      setProfile(current=>({...current,goalDirection:next}));
       setNote(nextGoal?`Новая норма — ${nextGoal} ккал ✓`:"Цель сохранена. Заполни данные тела для пересчёта.");
     } catch { setDirection(previous); setNote("Не удалось сохранить цель"); }
     finally { setChoosing(false); }
