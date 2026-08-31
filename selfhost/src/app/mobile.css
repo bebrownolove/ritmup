@@ -429,6 +429,9 @@ html,body,.loading { background:var(--page); }
 .friend-metrics { grid-column:1/-1; display:flex!important; flex-wrap:wrap; gap:6px; padding-top:8px; }
 .friend-metrics span { padding:6px 9px; border-radius:10px; background:var(--surface-soft); color:var(--muted); font-size:11px; white-space:nowrap; }
 .friend-metrics b { color:var(--ink); }
+.friend-food { flex:1 0 100%; display:grid; gap:3px; padding:10px 11px; border-radius:13px; background:var(--surface-soft); }
+.friend-food>b { font-size:11px; }
+.friend-food p { margin:0; color:var(--muted); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
 .privacy-section-title { margin:14px 0 2px; color:var(--green-dark); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
 .privacy-section-title.public { margin-top:22px; }
 
