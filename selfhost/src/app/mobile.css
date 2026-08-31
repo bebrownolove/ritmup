@@ -131,7 +131,7 @@
 .goal-choices button b { font-size:16px; }
 .goal-choices button small { color:var(--muted); }
 .goal-choices button>i { opacity:0; display:grid; place-items:center; width:23px; height:23px; border-radius:50%; background:var(--green); color:#fff; font-style:normal; transform:scale(.6); transition:.2s; }
-.goal-choices button.active { border-color:var(--green); background:#f2faee; }
+.goal-choices button.active { border-color:var(--green); background:var(--green-soft,#f2faee); color:var(--ink); }
 .goal-choices button.active>i { opacity:1; transform:scale(1); }
 .activity-choices { gap:8px; }
 .activity-choices button { padding:11px 13px; }
@@ -334,7 +334,8 @@ html,body,.loading { background:var(--page); }
 .milestone-bar { background:var(--track); }
 .health-connect-state>span { background:var(--track); }
 .health-values div,.weight-history div,.calc-box,.bmi-box,.tz-row,.token-row,.setup-note { background:var(--surface-soft); }
-.privacy-note,.rank-row.me,.recalculate { background:var(--green-soft); color:var(--muted); }
+.privacy-note,.rank-row.me { background:var(--green-soft); color:var(--muted); }
+.recalculate { background:var(--green-soft); color:var(--green-dark); }
 .streak,.coins-card,.milestone.done,.install-hint { background:var(--warning-soft); }
 .setup-warn { background:var(--warning-soft); color:var(--muted); }
 .bmi-box.normal { background:var(--green-soft); }
