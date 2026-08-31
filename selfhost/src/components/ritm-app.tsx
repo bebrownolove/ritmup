@@ -18,6 +18,10 @@ type HealthSnapshot = { calorieGoal?:number; activeCalories:number; steps?:numbe
 type HealthToken = { token:string; lastUsedAt:string|null };
 type HealthKitDetail = { date?:string; activeCalories?:number; steps?:number; exerciseMinutes?:number; weightKg?:number|null; error?:string };
 type Theme = "system"|"light"|"dark";
+type InstallPromptEvent = Event&{
+  prompt:()=>Promise<void>;
+  userChoice:Promise<{outcome:"accepted"|"dismissed"}>;
+};
 
 declare global {
   interface Window {
@@ -48,6 +52,45 @@ async function jsonFetch<T>(url:string, init?:RequestInit):Promise<T> {
   return response.json();
 }
 
+/** На iPhone браузер не даёт запустить установку кодом, поэтому показываем
+ * короткую инструкцию. В браузерах с системным окном установки кнопка вызывает его. */
+function InstallAppOffer() {
+  const [open,setOpen]=useState(false);
+  const [installed,setInstalled]=useState(false);
+  const [promptEvent,setPromptEvent]=useState<InstallPromptEvent|null>(null);
+  const [note,setNote]=useState("");
+  useEffect(()=>{
+    const standalone=window.matchMedia("(display-mode: standalone)").matches
+      ||(window.navigator as Navigator&{standalone?:boolean}).standalone===true;
+    queueMicrotask(()=>setInstalled(standalone));
+    const capture=(event:Event)=>{event.preventDefault();setPromptEvent(event as InstallPromptEvent);};
+    window.addEventListener("beforeinstallprompt",capture);
+    return()=>window.removeEventListener("beforeinstallprompt",capture);
+  },[]);
+  function toggleGuide(){setNote("");setOpen(current=>!current);}
+  async function runInstall(){
+    if(!promptEvent)return;
+    await promptEvent.prompt();
+    const choice=await promptEvent.userChoice;
+    if(choice.outcome==="accepted"){setInstalled(true);setNote("Готово — Ритм появится на домашнем экране ✓");}
+    else setNote("Можно установить позже этой же кнопкой.");
+    setPromptEvent(null);
+  }
+  return <div className={`auth-install ${installed?"installed":""}`}>
+    <button type="button" className="auth-install-button" onClick={toggleGuide} aria-expanded={open}>
+      <span aria-hidden>{installed?"✓":"📲"}</span><span><b>{installed?"Ритм уже установлен":"Установить на iPhone"}</b><small>{installed?"Открыто как отдельное приложение":"Будет на экране Домой, как обычное приложение"}</small></span><i>{open?"⌃":"›"}</i>
+    </button>
+    {open&&<div className="auth-install-guide pop-in">
+      {note?<p className="install-result">{note}</p>:installed
+        ? <p><b>Всё работает.</b> Если захочешь поставить Ритм на другой iPhone, открой <b>ritmup.ru</b> в Safari и повтори шаги ниже.</p>
+        : <p><b>На iPhone это занимает несколько секунд:</b></p>}
+      <ol><li>Открой <b>ritmup.ru</b> именно в Safari.</li><li>Нажми <b>Поделиться</b> <span aria-hidden>□↑</span>.</li><li>Выбери <b>«На экран „Домой“»</b> → <b>«Добавить»</b>.</li></ol>
+      {promptEvent&&!installed&&<button type="button" className="primary install-now" onClick={()=>void runInstall()}>Установить прямо сейчас</button>}
+      {!installed&&<small>После этого Ритм откроется без адресной строки. Обновления будут приходить автоматически.</small>}
+    </div>}
+  </div>;
+}
+
 function AuthScreen() {
   const googleEnabled=process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED==="true";
   const [mode,setMode]=useState<"signin"|"signup">("signup");
@@ -76,6 +119,7 @@ function AuthScreen() {
       <div className="mascot" aria-hidden>🔥</div>
       <p className="eyebrow">РИТМ</p><h1>Маленькие шаги.<br/>Каждый день.</h1>
       <p className="muted">Питание, движение и серия дней — просто и без рекламы.</p>
+      <InstallAppOffer/>
       <div className="segmented"><button className={mode==="signup"?"active":""} onClick={()=>setMode("signup")}>Регистрация</button><button className={mode==="signin"?"active":""} onClick={()=>setMode("signin")}>Войти</button></div>
       <form onSubmit={submit} className="auth-form">
         {mode==="signup"

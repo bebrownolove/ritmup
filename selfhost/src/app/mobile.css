@@ -161,6 +161,23 @@
 .result-step>.link-row { justify-self:center; }
 .health-fresh { color:var(--green-dark)!important; font-weight:750; }
 
+/* Установка PWA доступна ещё до регистрации и не перекрывает форму. */
+.auth-install { margin:18px 0 0; text-align:left; }
+.auth-install-button { display:grid; grid-template-columns:42px 1fr 18px; align-items:center; gap:10px; width:100%; border:2px solid #cfe8c6; border-radius:17px; padding:12px 13px; background:var(--green-soft,#eef8ea); color:var(--ink); text-align:left; transition:transform .12s,border-color .18s; }
+.auth-install-button:active { transform:scale(.98); }
+.auth-install-button>span:first-child { display:grid; place-items:center; width:42px; height:42px; border-radius:13px; background:var(--card); font-size:23px; color:var(--green-dark); }
+.auth-install-button>span:nth-child(2) { display:grid; gap:3px; min-width:0; }
+.auth-install-button b { font-size:14px; }
+.auth-install-button small { color:var(--muted); font-size:11px; line-height:1.3; }
+.auth-install-button i { color:var(--green-dark); font-size:25px; font-style:normal; text-align:center; }
+.auth-install.installed .auth-install-button { border-color:var(--green); }
+.auth-install-guide { display:grid; gap:8px; margin-top:8px; padding:13px 14px; border:1px solid var(--line); border-radius:15px; background:var(--surface-soft,#f7faf5); }
+.auth-install-guide p { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
+.auth-install-guide ol { display:grid; gap:6px; margin:0; padding-left:20px; color:var(--ink); font-size:12px; line-height:1.4; }
+.auth-install-guide>small { color:var(--muted); font-size:11px; line-height:1.4; }
+.auth-install-guide .install-result { color:var(--green-dark); font-weight:800; }
+.auth-install-guide .install-now { width:100%; margin-top:2px; padding:11px; }
+
 @keyframes onboarding-in { from { opacity:0; transform:translateX(20px); } }
 @keyframes card-rise { from { opacity:0; transform:translateY(13px) scale(.985); } }
 @keyframes tab-bounce { 0%{transform:scale(.75)} 65%{transform:scale(1.22)} 100%{transform:scale(1)} }
@@ -169,6 +186,9 @@
 @keyframes celebration { 0%{opacity:0;transform:scale(.5) rotate(-12deg)} 55%{transform:scale(1.15) rotate(8deg)} 100%{opacity:1;transform:scale(1) rotate(0)} }
 
 @media (max-width: 620px) {
+  .auth-shell { align-items:start; padding:58px 12px 24px; }
+  .auth-card { margin-top:0; }
+  .auth-install { margin-top:14px; }
   .content { padding: 16px 12px; }
   .screen { gap: 14px; }
   .app-shell header { min-height: 62px; padding-left: 18px; padding-right: 18px; }
