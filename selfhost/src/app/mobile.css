@@ -323,6 +323,11 @@ html,body,.loading { background:var(--page); }
 .auth-form label,.body-form label,.goal-row label,.weight-row label,.onboarding-form label,.setup-steps { color:var(--ink); }
 
 @media(max-width:620px) {
+  .mini-user>.coins-chip { display:flex; }
+  .stats-hero { align-items:stretch; flex-direction:column; gap:12px; }
+  .stats-hero h2 { white-space:nowrap; }
+  .stats-hero .range-switch { width:100%; }
+  .stats-hero .range-switch button { flex:1; }
   .setup-flow { grid-template-columns:1fr; }
   .setup-flow>div { grid-template-columns:30px 1fr; align-items:center; }
   .bmi-labels b { font-size:8px!important; }

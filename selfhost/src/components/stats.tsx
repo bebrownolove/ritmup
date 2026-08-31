@@ -75,7 +75,7 @@ export function StatsScreen() {
   const weightChange=weighed.length>1?weighed[weighed.length-1].weightKg!-weighed[0].weightKg!:null;
 
   return <section className="screen slide-up">
-    <div className="hero-row"><div><p className="eyebrow">СТАТИСТИКА</p><h2>Как идут дела</h2></div>
+    <div className="hero-row stats-hero"><div><p className="eyebrow">СТАТИСТИКА</p><h2>Как идут дела</h2></div>
       <div className="range-switch">{[7,30,90].map(value=>
         <button key={value} className={range===value?"active":""} onClick={()=>setRange(value)}>{value} дней</button>)}</div>
     </div>
