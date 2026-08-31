@@ -6,6 +6,7 @@ import { ACTIVITY, basalRate, bmi, bmiCategory, goalCalories, maintenance, weeks
 type Profile = {
   heightCm?:number|null; sex?:"male"|"female"|null; birthYear?:number|null;
   activityLevel?:string; targetWeightKg?:number|null; calorieGoal?:number;
+  goalDirection?:"lose"|"keep"|"gain";
 };
 type Draft = {heightCm:string;sex:""|"male"|"female";birthYear:string;activityLevel:string;targetWeightKg:string};
 
@@ -72,7 +73,8 @@ export function BodyCard({embedded=false}:{embedded?:boolean}) {
   const basal=ready?basalRate({weightKg:weightKg!,heightCm:profile.heightCm!,age:age!,sex:profile.sex!}):null;
   const maintain=basal?maintenance(basal,profile.activityLevel??"light"):null;
   const target=profile.targetWeightKg??null;
-  const direction:"lose"|"keep"|"gain"=!target||!weightKg?"keep":target<weightKg-0.3?"lose":target>weightKg+0.3?"gain":"keep";
+  const inferredDirection:"lose"|"keep"|"gain"=!target||!weightKg?"keep":target<weightKg-0.3?"lose":target>weightKg+0.3?"gain":"keep";
+  const direction=profile.goalDirection??inferredDirection;
   const suggested=maintain?goalCalories(maintain,direction):null;
   const weeks=maintain&&target&&weightKg&&suggested?weeksToTarget(weightKg,target,Math.abs(maintain-suggested)):null;
 

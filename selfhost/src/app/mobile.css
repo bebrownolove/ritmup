@@ -359,3 +359,17 @@ html,body,.loading { background:var(--page); }
 .milestone-head p small { color:var(--muted); font-size:12px; line-height:1.4; }
 .milestone.reached { background:var(--warning-soft); border-color:#ffe0a5; }
 .milestone.reached .milestone-head>span { animation:tab-bounce .5s cubic-bezier(.2,.9,.3,1.25); }
+
+/* На узком iPhone время раньше оказывалось поверх системной стрелки select. */
+.tz-row { display:grid; gap:8px; overflow:hidden; }
+.tz-row label { display:grid; gap:3px; min-width:0; width:100%; }
+.tz-row select { display:block; width:100%; max-width:100%; min-width:0; padding-right:34px; }
+.tz-now { display:block; min-width:0; padding:0; color:var(--muted); font-size:12px; line-height:1.35; white-space:normal; overflow-wrap:anywhere; }
+
+.goal-settings { display:grid; gap:14px; }
+.goal-choices.compact button { grid-template-columns:34px 1fr 22px; padding:11px 12px; border-radius:14px; }
+.goal-choices.compact button>span { font-size:22px; }
+.goal-choices.compact button b { font-size:14px; }
+.goal-choices.compact button small { font-size:12px; }
+.goal-choices.compact button:disabled { cursor:wait; opacity:.72; }
+.goal-note { margin:0; color:var(--green-dark); font-size:13px; font-weight:750; line-height:1.4; }

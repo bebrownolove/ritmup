@@ -6,6 +6,7 @@ import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
 import { CoinsChip, Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
 import { Onboarding } from "@/components/onboarding";
+import { basalRate, goalCalories, maintenance } from "@/lib/body";
 
 type Tab = "today" | "stats" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; relationship?:string; status?:string; sentByMe?:boolean };
@@ -374,14 +375,43 @@ function TimezoneRow() {
         {options.map(item=><option key={item} value={item}>{item}</option>)}
       </select>
     </label>
-    <span className="tz-now">{localTime&&`сейчас ${localTime}`}{saved&&" · сохранено ✓"}</span>
+    <span className="tz-now">{localTime&&`Местное время: ${localTime}`}{saved&&" · сохранено ✓"}</span>
   </div>;
 }
 
+type GoalDirection = "lose"|"keep"|"gain";
+const goalDirections:{key:GoalDirection;icon:string;title:string;text:string}[] = [
+  {key:"lose",icon:"🌱",title:"Снизить вес",text:"Мягкий дефицит калорий"},
+  {key:"keep",icon:"⚖️",title:"Держать вес",text:"Баланс еды и движения"},
+  {key:"gain",icon:"💪",title:"Набрать вес",text:"Небольшой запас энергии"},
+];
+
 function GoalRow() {
-  const [goal,setGoal]=useState(""); const [saved,setSaved]=useState(false);
-  useEffect(()=>{void jsonFetch<{calorieGoal?:number}>("/api/profile")
-    .then(profile=>setGoal(String(profile.calorieGoal??2000))).catch(()=>{});},[]);
+  const [goal,setGoal]=useState(""); const [direction,setDirection]=useState<GoalDirection>("keep");
+  const [profile,setProfile]=useState<{heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string}>({});
+  const [weight,setWeight]=useState<number|null>(null); const [saved,setSaved]=useState(false); const [choosing,setChoosing]=useState(false); const [note,setNote]=useState("");
+  useEffect(()=>{void Promise.all([
+    jsonFetch<{calorieGoal?:number;goalDirection?:GoalDirection;heightCm?:number|null;sex?:"male"|"female"|null;birthYear?:number|null;activityLevel?:string}>("/api/profile"),
+    jsonFetch<{weightKg:number}[]>("/api/weight"),
+  ]).then(([current,history])=>{setGoal(String(current.calorieGoal??2000));setDirection(current.goalDirection??"keep");setProfile(current);setWeight(history.at(-1)?.weightKg??null);}).catch(()=>{});},[]);
+  async function choose(next:GoalDirection){
+    if(choosing||next===direction)return;
+    const previous=direction;
+    setDirection(next); setNote("");
+    setChoosing(true);
+    const age=profile.birthYear?new Date().getFullYear()-profile.birthYear:null;
+    let nextGoal:number|null=null;
+    if(weight&&profile.heightCm&&profile.sex&&age){
+      const basal=basalRate({weightKg:weight,heightCm:profile.heightCm,age,sex:profile.sex});
+      nextGoal=goalCalories(maintenance(basal,profile.activityLevel??"light"),next);
+    }
+    try {
+      await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({goalDirection:next,...(nextGoal?{calorieGoal:nextGoal}:{})})});
+      if(nextGoal)setGoal(String(nextGoal));
+      setNote(nextGoal?`Новая норма — ${nextGoal} ккал ✓`:"Цель сохранена. Заполни данные тела для пересчёта.");
+    } catch { setDirection(previous); setNote("Не удалось сохранить цель"); }
+    finally { setChoosing(false); }
+  }
   async function save(event:FormEvent){
     event.preventDefault();
     const value=Number(goal);
@@ -389,10 +419,15 @@ function GoalRow() {
     await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({calorieGoal:value})}).catch(()=>{});
     setSaved(true); setTimeout(()=>setSaved(false),1600);
   }
-  return <form className="goal-row" onSubmit={save}>
-    <label>Дневная норма калорий<input value={goal} onChange={event=>setGoal(event.target.value)} type="number" min="500" max="10000" step="50"/></label>
-    <button disabled={!goal}>{saved?"Сохранено ✓":"Сохранить"}</button>
-  </form>;
+  return <div className="goal-settings">
+    <div className="goal-choices compact">{goalDirections.map(item=><button type="button" key={item.key} disabled={choosing} className={direction===item.key?"active":""} onClick={()=>void choose(item.key)}><span>{item.icon}</span><div><b>{item.title}</b><small>{item.text}</small></div><i>✓</i></button>)}</div>
+    {note&&<p className="goal-note">{note}</p>}
+    <form className="goal-row" onSubmit={save}>
+      <label>Дневная норма калорий<input value={goal} onChange={event=>setGoal(event.target.value)} type="number" min="500" max="10000" step="50"/></label>
+      <button disabled={!goal}>{saved?"Сохранено ✓":"Сохранить"}</button>
+    </form>
+    <p className="muted small">Можно выбрать направление или задать свою норму вручную.</p>
+  </div>;
 }
 
 function HealthSetup({embedded=false}:{embedded?:boolean}) {
@@ -440,7 +475,7 @@ function Profile({user,onOpenOnboarding}:{user:{name:string;email:string;usernam
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
   return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><div className="big-avatar">{user.name.slice(0,1).toUpperCase()}</div><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
     <div className="profile-menu">
-      <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Дневная норма</b><small>Цель по калориям</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти расчёт заново</button></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Цель и дневная норма</b><small>Снизить, держать или набрать вес</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти полный расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{saved?"Сохранено ✓":"Что видят друзья"}</small></div><i>›</i></summary><div className="profile-group-content settings"><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><Toggle label="Показывать серию друзьям" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><p className="privacy-note">Вес и точное количество калорий друзьям не показываются.</p></div></details>

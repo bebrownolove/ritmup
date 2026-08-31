@@ -49,7 +49,7 @@ export function Onboarding({onComplete}:Props) {
     try {
       // Сначала сохраняем норму, затем дневной вес: иначе параллельный запрос
       // мог успеть создать сегодняшний день со старым значением 2000.
-      await api("/api/profile",{heightCm:result.heightCm,sex,birthYear:result.year,activityLevel:activity,calorieGoal:result.goal,onboardingCompleted:true},"PATCH");
+      await api("/api/profile",{heightCm:result.heightCm,sex,birthYear:result.year,activityLevel:activity,goalDirection:direction,calorieGoal:result.goal,onboardingCompleted:true},"PATCH");
       await api("/api/daily-log",{date:localDate(),weightKg:result.weightKg,calorieGoal:result.goal});
       onComplete();
     } catch { setError("Не удалось сохранить. Проверь интернет и попробуй ещё раз."); }
