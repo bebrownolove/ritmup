@@ -1,74 +1,181 @@
 "use client";
 
-import { useState } from "react";
-import { AvatarConfig, DEFAULT_AVATAR, normalizeAvatar } from "@/lib/avatar";
+import { useMemo, useState } from "react";
+import {
+  AVATAR_VALUES, AvatarConfig, DEFAULT_AVATAR, applySex, isUnlocked, lockCost, normalizeAvatar, unlockId,
+} from "@/lib/avatar";
+import { AVATAR_CROPS, AVATAR_CROP_OVERRIDE, BG, HAIRC, SKIN, renderAvatar, shade } from "@/lib/avatar-render";
 
 type Category = keyof AvatarConfig;
-const categories:{key:Category;icon:string;label:string}[]=[
-  {key:"skin",icon:"🎨",label:"Кожа"},{key:"head",icon:"🙂",label:"Голова"},{key:"hair",icon:"💇",label:"Волосы"},
-  {key:"hairColor",icon:"🖌️",label:"Цвет волос"},{key:"eyes",icon:"👀",label:"Глаза"},{key:"mouth",icon:"👄",label:"Рот"},
-  {key:"outfit",icon:"👕",label:"Одежда"},{key:"headwear",icon:"🧢",label:"На голову"},{key:"glasses",icon:"👓",label:"Очки"},
-  {key:"piercing",icon:"💎",label:"Пирсинг"},{key:"tattoo",icon:"⚡",label:"Тату"},{key:"accessory",icon:"🎧",label:"Аксессуар"},
-  {key:"background",icon:"🌈",label:"Фон"},
-];
 
-const choices:Record<Category,{key:string;label:string;icon?:string;color?:string}[]>={
-  skin:[{key:"porcelain",label:"Фарфор",color:"#ffe8dc"},{key:"fair",label:"Светлая",color:"#f7cfb2"},{key:"warm",label:"Тёплая",color:"#e8ae7d"},{key:"tan",label:"Загар",color:"#c98252"},{key:"brown",label:"Смуглая",color:"#975e3d"},{key:"deep",label:"Тёмная",color:"#593827"},{key:"rose",label:"Розовая",color:"#e89aa5"},{key:"fantasy",label:"Мятная",color:"#8bd8c7"}],
-  head:[{key:"round",label:"Круглая",icon:"●"},{key:"oval",label:"Овальная",icon:"⬮"},{key:"soft",label:"Мягкая",icon:"▢"},{key:"square",label:"Квадратная",icon:"■"}],
-  hair:[{key:"short",label:"Короткие",icon:"✂️"},{key:"fringe",label:"Чёлка",icon:"〰"},{key:"bob",label:"Каре",icon:"◒"},{key:"long",label:"Длинные",icon:"⬇"},{key:"curls",label:"Кудри",icon:"➰"},{key:"buns",label:"Пучки",icon:"●●"},{key:"mohawk",label:"Ирокез",icon:"▲"},{key:"waves",label:"Волны",icon:"≈"},{key:"shaved",label:"Ёжик",icon:"•••"},{key:"messy",label:"Растрёпанные",icon:"✦"}],
-  hairColor:[{key:"espresso",label:"Кофе",color:"#3a251f"},{key:"black",label:"Чёрный",color:"#17191d"},{key:"chestnut",label:"Каштан",color:"#70402e"},{key:"honey",label:"Мёд",color:"#dcae4c"},{key:"copper",label:"Медь",color:"#b9512f"},{key:"pink",label:"Розовый",color:"#e36f9f"},{key:"blue",label:"Синий",color:"#5175dc"},{key:"mint",label:"Мятный",color:"#4ebda5"},{key:"silver",label:"Серебро",color:"#b9bec9"}],
-  eyes:[{key:"dot",label:"Точки",icon:"• •"},{key:"bright",label:"Живые",icon:"◕ ◕"},{key:"happy",label:"Весёлые",icon:"⌃ ⌃"},{key:"sleepy",label:"Сонные",icon:"— —"},{key:"star",label:"Звёзды",icon:"★ ★"},{key:"wide",label:"Большие",icon:"◉ ◉"},{key:"wink",label:"Подмигивание",icon:"• —"},{key:"lashes",label:"Ресницы",icon:"˄ ˄"}],
-  mouth:[{key:"smile",label:"Улыбка",icon:"⌣"},{key:"grin",label:"До ушей",icon:"▽"},{key:"soft",label:"Мягкая",icon:"ᴗ"},{key:"open",label:"Открытый",icon:"○"},{key:"kiss",label:"Поцелуй",icon:"з"},{key:"calm",label:"Спокойный",icon:"—"},{key:"surprised",label:"Ого",icon:"o"}],
-  outfit:[{key:"tee",label:"Футболка",icon:"👕"},{key:"hoodie",label:"Худи",icon:"🧥"},{key:"sweater",label:"Свитер",icon:"🧶"},{key:"jacket",label:"Куртка",icon:"🧥"},{key:"sport",label:"Спортивная",icon:"🏃"},{key:"dress",label:"Платье",icon:"👗"},{key:"shirt",label:"Рубашка",icon:"👔"},{key:"overalls",label:"Комбинезон",icon:"🩱"},{key:"punk",label:"Панк",icon:"🤘"},{key:"varsity",label:"Бомбер",icon:"🏅"},{key:"armor",label:"Доспех",icon:"🛡️"},{key:"space",label:"Космос",icon:"🚀"}],
-  headwear:[{key:"none",label:"Без",icon:"×"},{key:"cap",label:"Кепка",icon:"🧢"},{key:"beanie",label:"Шапка",icon:"🧶"},{key:"crown",label:"Корона",icon:"👑"},{key:"bandana",label:"Бандана",icon:"🔻"},{key:"cowboy",label:"Ковбойская",icon:"🤠"},{key:"halo",label:"Нимб",icon:"✨"},{key:"flowers",label:"Цветы",icon:"🌸"}],
-  glasses:[{key:"none",label:"Без",icon:"×"},{key:"round",label:"Круглые",icon:"◉—◉"},{key:"square",label:"Квадратные",icon:"□—□"},{key:"sun",label:"Тёмные",icon:"🕶️"},{key:"heart",label:"Сердца",icon:"♥ ♥"},{key:"sport",label:"Спорт",icon:"🥽"},{key:"mono",label:"Монокль",icon:"◉"}],
-  piercing:[{key:"none",label:"Без",icon:"×"},{key:"stud",label:"Гвоздик",icon:"•"},{key:"double",label:"Двойной",icon:"••"},{key:"hoop",label:"Кольцо",icon:"○"},{key:"nose",label:"В носу",icon:"✦"},{key:"brow",label:"В брови",icon:"••"},{key:"septum",label:"Септум",icon:"∪"}],
-  tattoo:[{key:"none",label:"Без",icon:"×"},{key:"star",label:"Звезда",icon:"★"},{key:"heart",label:"Сердце",icon:"♥"},{key:"bolt",label:"Молния",icon:"ϟ"},{key:"moon",label:"Луна",icon:"☾"},{key:"flower",label:"Цветок",icon:"✿"},{key:"wave",label:"Волна",icon:"≈"}],
-  accessory:[{key:"none",label:"Без",icon:"×"},{key:"chain",label:"Цепь",icon:"⛓"},{key:"scarf",label:"Шарф",icon:"🧣"},{key:"headphones",label:"Наушники",icon:"🎧"},{key:"earbuds",label:"Вкладыши",icon:"🎵"},{key:"bow",label:"Бант",icon:"🎀"},{key:"badge",label:"Значок",icon:"⭐"},{key:"necklace",label:"Кулон",icon:"💠"}],
-  background:[{key:"mint",label:"Мята",color:"#cdeecb"},{key:"sky",label:"Небо",color:"#cbe8fa"},{key:"peach",label:"Персик",color:"#ffd7bd"},{key:"lemon",label:"Лимон",color:"#f8ed9f"},{key:"lavender",label:"Лаванда",color:"#ded2f7"},{key:"rose",label:"Роза",color:"#f7cedb"},{key:"ocean",label:"Океан",color:"#70c6cf"},{key:"night",label:"Ночь",color:"#26334f"},{key:"lime",label:"Лайм",color:"#bce56d"},{key:"coral",label:"Коралл",color:"#f3907f"},{key:"sand",label:"Песок",color:"#e8d2a7"},{key:"graphite",label:"Графит",color:"#697079"}],
+const CATEGORY_LABEL:Record<Category,string> = {
+  sex:"Кто твой персонаж", skin:"Кожа", head:"Форма головы", hair:"Причёска", hairColor:"Цвет волос",
+  eyes:"Глаза", mouth:"Рот", glasses:"Очки", outfit:"Одежда", headwear:"На голову",
+  accessory:"Аксессуар", piercing:"Пирсинг", tattoo:"Тату", background:"Фон",
 };
 
-const eyeText:Record<string,string>={dot:"•  •",bright:"◕  ◕",happy:"⌃  ⌃",sleepy:"—  —",star:"★  ★",wide:"◉  ◉",wink:"•  —",lashes:"˄  ˄"};
-const mouthText:Record<string,string>={smile:"⌣",grin:"▽",soft:"ᴗ",open:"○",kiss:"з",calm:"—",surprised:"o"};
-const hatText:Record<string,string>={none:"",cap:"🧢",beanie:"●",crown:"♛",bandana:"▰",cowboy:"⌒",halo:"◯",flowers:"✿ ✿"};
-const glassesText:Record<string,string>={none:"",round:"○—○",square:"□—□",sun:"▰ ▰",heart:"♥ ♥",sport:"▱",mono:"○"};
-const tattooText:Record<string,string>={none:"",star:"★",heart:"♥",bolt:"ϟ",moon:"☾",flower:"✿",wave:"≈"};
-const accessoryText:Record<string,string>={none:"",chain:"◡◡",scarf:"▰",headphones:"◖ ◗",earbuds:"• ♪",bow:"⋈",badge:"★",necklace:"◇"};
+const GROUPS:{title:string;cats:Category[]}[] = [
+  { title:"КТО ТЫ", cats:["sex"] },
+  { title:"ВНЕШНОСТЬ", cats:["skin","head"] },
+  { title:"ВОЛОСЫ", cats:["hair","hairColor"] },
+  { title:"ЛИЦО", cats:["eyes","mouth","glasses"] },
+  { title:"СТИЛЬ", cats:["outfit","headwear","accessory","piercing","tattoo","background"] },
+];
 
-export function CharacterAvatar({value,size="medium",label="Персонаж"}:{value?:Partial<AvatarConfig>|null;size?:"small"|"medium"|"large";label?:string}){
+const LABELS:Record<Category,Record<string,string>> = {
+  sex:{ girl:"Девочка", boy:"Мальчик" },
+  skin:{ porcelain:"Фарфор", fair:"Светлая", warm:"Тёплая", tan:"Загар", brown:"Смуглая", deep:"Тёмная", rose:"Розовая", fantasy:"Мятная" },
+  head:{ round:"Круглая", oval:"Овальная", soft:"Мягкая", square:"Квадратная" },
+  hair:{ short:"Короткие", fringe:"Чёлка", bob:"Каре", long:"Длинные", curls:"Кудри", buns:"Пучки", mohawk:"Ирокез", waves:"Волны", shaved:"Ёжик", messy:"Растрёпанные" },
+  hairColor:{ espresso:"Кофе", black:"Чёрный", chestnut:"Каштан", honey:"Мёд", copper:"Медь", pink:"Розовый", blue:"Синий", mint:"Мятный", silver:"Серебро" },
+  eyes:{ dot:"Точки", bright:"Живые", happy:"Весёлые", sleepy:"Сонные", star:"Звёзды", wide:"Большие", wink:"Подмигивание", lashes:"Ресницы" },
+  mouth:{ smile:"Улыбка", grin:"До ушей", soft:"Мягкая", open:"Открытый", kiss:"Поцелуй", calm:"Спокойный", surprised:"Ого" },
+  outfit:{ tee:"Футболка", hoodie:"Худи", sweater:"Свитер", jacket:"Куртка", sport:"Спорт", dress:"Платье", shirt:"Рубашка", overalls:"Комбинезон", punk:"Панк", varsity:"Бомбер", armor:"Доспех", space:"Космос" },
+  headwear:{ none:"Без", cap:"Кепка", beanie:"Шапка", crown:"Корона", bandana:"Бандана", cowboy:"Ковбойская", halo:"Нимб", flowers:"Цветы" },
+  glasses:{ none:"Без", round:"Круглые", square:"Квадратные", sun:"Тёмные", heart:"Сердца", sport:"Спорт", mono:"Монокль" },
+  piercing:{ none:"Без", stud:"Гвоздик", double:"Двойной", hoop:"Кольцо", nose:"В носу", brow:"В брови", septum:"Септум" },
+  tattoo:{ none:"Без", star:"Звезда", heart:"Сердце", bolt:"Молния", moon:"Луна", flower:"Цветок", wave:"Волна" },
+  accessory:{ none:"Без", chain:"Цепь", scarf:"Шарф", headphones:"Наушники", earbuds:"Вкладыши", bow:"Бант", badge:"Значок", necklace:"Кулон" },
+  background:{ mint:"Мята", sky:"Небо", peach:"Персик", lemon:"Лимон", lavender:"Лаванда", rose:"Роза", ocean:"Океан", night:"Ночь", lime:"Лайм", coral:"Коралл", sand:"Песок", graphite:"Графит" },
+};
+
+/** Высота превью на плитке подбирается под кроп, иначе деталь теряется. */
+const PREVIEW_H:Partial<Record<Category,string>> = {
+  sex:"112px", head:"88px", hair:"88px", eyes:"84px", mouth:"84px", glasses:"88px",
+  outfit:"64px", accessory:"78px", headwear:"78px", piercing:"70px", tattoo:"70px",
+};
+
+/** Категории цвета показывают образец краски, а не миниатюру персонажа. */
+function swatchOf(category:Category, key:string) {
+  if (category==="skin") return SKIN[key];
+  if (category==="hairColor") return HAIRC[key];
+  if (category==="background") return BG[key];
+  return null;
+}
+
+export function CharacterAvatar({value,size="medium",label="Персонаж"}:{value?:Partial<AvatarConfig>|null;size?:"small"|"medium"|"large";label?:string}) {
   const avatar=normalizeAvatar(value);
-  return <div className={`character-avatar avatar-${size} bg-${avatar.background}`} role="img" aria-label={label}>
-    <div className={`avatar-body outfit-${avatar.outfit}`}><i/></div>
-    <div className={`avatar-neck skin-${avatar.skin}`}/>
-    <div className={`avatar-head head-${avatar.head} skin-${avatar.skin}`}>
-      <i className="avatar-ear left"/><i className="avatar-ear right"/>
-      <div className={`avatar-hair hair-${avatar.hair} haircolor-${avatar.hairColor}`}/>
-      <span className="avatar-eyes">{eyeText[avatar.eyes]}</span><span className="avatar-mouth">{mouthText[avatar.mouth]}</span>
-      <span className={`avatar-piercing piercing-${avatar.piercing}`}>{avatar.piercing==="none"?"":"•"}</span>
-      <span className="avatar-tattoo">{tattooText[avatar.tattoo]}</span>
-      <span className={`avatar-glasses glasses-${avatar.glasses}`}>{glassesText[avatar.glasses]}</span>
+  return <div className={`character-avatar avatar-${size}`}>{renderAvatar(avatar,{label})}</div>;
+}
+
+async function api<T>(url:string, init?:RequestInit):Promise<T> {
+  const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}});
+  if(!response.ok) throw Object.assign(new Error("request_failed"),{status:response.status});
+  return response.json();
+}
+
+type SaveState = "idle"|"saving"|"saved"|"error";
+
+/**
+ * Полноэкранный редактор персонажа. Категории идут вертикальными секциями:
+ * горизонтальную полосу из 13 табов на телефоне пролистать до конца невозможно.
+ */
+export function AvatarEditor({initial,coins:initialCoins,unlocked:initialUnlocked,onSaved,onCoins,onClose}:{
+  initial?:Partial<AvatarConfig>|null; coins:number; unlocked?:readonly string[]|null;
+  onSaved?:(value:AvatarConfig)=>void; onCoins?:(coins:number)=>void; onClose:()=>void;
+}) {
+  const saved=useMemo(()=>normalizeAvatar(initial??DEFAULT_AVATAR),[initial]);
+  const [value,setValue]=useState<AvatarConfig>(saved);
+  const [unlocked,setUnlocked]=useState<string[]>(()=>[...(initialUnlocked??[])]);
+  const [coins,setCoins]=useState(initialCoins);
+  const [state,setState]=useState<SaveState>("idle");
+  const [note,setNote]=useState("");
+
+  const dirty=useMemo(()=>JSON.stringify(value)!==JSON.stringify(saved),[value,saved]);
+
+  function flash(text:string){setNote(text);setTimeout(()=>setNote(""),2200);}
+
+  async function choose(category:Category, key:string) {
+    const cost=lockCost(category,key);
+    if(cost&&!unlocked.includes(unlockId(category,key))) {
+      if(coins<cost){flash(`Не хватает ${cost-coins} 🪙 — копи серией дней`);return;}
+      try{
+        const result=await api<{coins:number;unlocked?:string[]}>("/api/avatar/unlock",{method:"POST",body:JSON.stringify({category,key})});
+        setCoins(result.coins); onCoins?.(result.coins);
+        setUnlocked(result.unlocked??[...unlocked,unlockId(category,key)]);
+        flash(`Открыто за ${cost} 🪙`);
+      }catch(error){
+        flash((error as {status?:number}).status===402?"Не хватает монет":"Не получилось купить");
+        return;
+      }
+    }
+    setValue(previous=>category==="sex"?applySex(previous,key as AvatarConfig["sex"]):{...previous,[category]:key});
+    setState("idle");
+  }
+
+  function randomize() {
+    setValue(previous=>{
+      const next={...previous};
+      for(const category of Object.keys(AVATAR_VALUES) as Category[]) {
+        if(category==="sex") continue;
+        const pool=(AVATAR_VALUES[category] as readonly string[]).filter(key=>isUnlocked(category,key,unlocked));
+        next[category]=pool[Math.floor(Math.random()*pool.length)] as never;
+      }
+      return next;
+    });
+    setState("idle");
+  }
+
+  async function save() {
+    setState("saving");
+    try{
+      await api("/api/profile",{method:"PATCH",body:JSON.stringify({avatarConfig:value})});
+      setState("saved"); onSaved?.(value); setTimeout(()=>setState("idle"),2000);
+    }catch{setState("error");}
+  }
+
+  return <div className="maker">
+    <header className="maker-bar">
+      <button type="button" className="maker-back" onClick={onClose} aria-label="Назад">‹</button>
+      <div><b>Мой персонаж</b><small>Виден в шапке, профиле и у друзей</small></div>
+      <div className="maker-coins"><i/><b>{coins}</b></div>
+    </header>
+
+    <div className="maker-stage" style={{background:shade(BG[value.background],0.55)}}>
+      <div className="maker-hero">{renderAvatar(value,{label:"Твой персонаж"})}</div>
     </div>
-    <span className={`avatar-hat hat-${avatar.headwear}`}>{hatText[avatar.headwear]}</span>
-    <span className={`avatar-accessory accessory-${avatar.accessory}`}>{accessoryText[avatar.accessory]}</span>
-  </div>;
-}
 
-async function saveAvatar(value:AvatarConfig){
-  const response=await fetch("/api/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({avatarConfig:value})});
-  if(!response.ok)throw new Error("save_failed");
-}
+    <div className="maker-tools">
+      <button type="button" onClick={randomize}>Случайно</button>
+      <button type="button" onClick={()=>{setValue(saved);setState("idle");}} disabled={!dirty}>Вернуть</button>
+    </div>
 
-export function AvatarEditor({initial,onSaved}:{initial?:Partial<AvatarConfig>|null;onSaved?:(value:AvatarConfig)=>void}){
-  const [value,setValue]=useState<AvatarConfig>(()=>normalizeAvatar(initial??DEFAULT_AVATAR));
-  const [category,setCategory]=useState<Category>("skin"); const [state,setState]=useState<"idle"|"saving"|"saved"|"error">("idle");
-  const current=categories.find(item=>item.key===category)!;
-  function choose(key:string){setValue(previous=>({...previous,[category]:key}));setState("idle");}
-  async function save(){setState("saving");try{await saveAvatar(value);setState("saved");onSaved?.(value);setTimeout(()=>setState("idle"),1800);}catch{setState("error");}}
-  return <div className="avatar-editor">
-    <div className="avatar-editor-preview"><CharacterAvatar value={value} size="large"/><div><b>Твой персонаж</b><small>Будет виден тебе и друзьям</small></div></div>
-    <div className="avatar-categories" role="tablist" aria-label="Части персонажа">{categories.map(item=><button type="button" role="tab" aria-selected={category===item.key} className={category===item.key?"active":""} key={item.key} onClick={()=>setCategory(item.key)}><span>{item.icon}</span>{item.label}</button>)}</div>
-    <div className="avatar-choice-head"><b>{current.icon} {current.label}</b><small>{choices[category].length} вариантов</small></div>
-    <div className="avatar-options">{choices[category].map(option=><button type="button" className={value[category]===option.key?"active":""} aria-pressed={value[category]===option.key} key={option.key} onClick={()=>choose(option.key)}><i style={option.color?{background:option.color}:undefined}>{option.icon}</i><span>{option.label}</span></button>)}</div>
-    <button className="primary avatar-save" disabled={state==="saving"} onClick={()=>void save()}>{state==="saving"?"Сохраняю…":state==="saved"?"Персонаж сохранён ✓":state==="error"?"Попробовать ещё раз":"Сохранить персонажа"}</button>
+    <div className="maker-groups">
+      {GROUPS.map(group=><section key={group.title} className="maker-group">
+        <div className="maker-group-head"><h2>{group.title}</h2><span/></div>
+        {group.cats.map(category=>{
+          const options=AVATAR_VALUES[category] as readonly string[];
+          return <div className="maker-cat" key={category}>
+            <div className="maker-cat-head"><b>{CATEGORY_LABEL[category]}</b><small>{LABELS[category][value[category]]}</small></div>
+            <div className="maker-options">
+              {options.map(key=>{
+                const cost=lockCost(category,key);
+                const locked=Boolean(cost)&&!unlocked.includes(unlockId(category,key));
+                const swatch=swatchOf(category,key);
+                const preview=category==="sex"?applySex(value,key as AvatarConfig["sex"]):{...value,[category]:key};
+                const crop=AVATAR_CROP_OVERRIDE[category]?.[key]??AVATAR_CROPS[category]??null;
+                return <button type="button" key={key}
+                  className={`maker-option${value[category]===key?" active":""}${locked?" locked":""}${locked&&coins<cost!?" poor":""}`}
+                  aria-pressed={value[category]===key}
+                  onClick={()=>void choose(category,key)}>
+                  <span className="maker-preview" style={{height:swatch?"58px":(PREVIEW_H[category]??"84px"),background:swatch??BG[value.background]}}>
+                    {swatch?null:renderAvatar(preview as AvatarConfig,{crop,label:LABELS[category][key]})}
+                  </span>
+                  <span className="maker-option-label">{LABELS[category][key]}</span>
+                  {locked&&<span className="maker-price"><i/>{cost}</span>}
+                </button>;
+              })}
+            </div>
+          </div>;
+        })}
+      </section>)}
+    </div>
+
+    <div className="maker-foot">
+      {note&&<small className="maker-note">{note}</small>}
+      <button className={`primary maker-save${state==="saved"?" done":""}`} disabled={state==="saving"||(!dirty&&state!=="error")} onClick={()=>void save()}>
+        {state==="saving"?"Сохраняю…":state==="saved"?"Персонаж сохранён ✓":state==="error"?"Попробовать ещё раз":dirty?"Сохранить персонажа":"Изменений нет"}
+      </button>
+    </div>
   </div>;
 }

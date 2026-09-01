@@ -324,7 +324,7 @@ function Friends() {
   const [query,setQuery]=useState(""); const [results,setResults]=useState<Person[]>([]); const [people,setPeople]=useState<Person[]>([]); const [feed,setFeed]=useState<FeedEvent[]>([]); const [notice,setNotice]=useState("");
   const [peek,setPeek]=useState<string|null>(null);
   const refresh=useCallback(async()=>{const [friends,events]=await Promise.all([jsonFetch<Person[]>("/api/friends"),jsonFetch<FeedEvent[]>("/api/feed")]);setPeople(friends);setFeed(events);},[]);
-  useEffect(()=>{void refresh();},[refresh]);
+  useEffect(()=>{void Promise.resolve().then(refresh);},[refresh]);
   useEffect(()=>{const timer=setTimeout(()=>{if(query.trim().length>=2)jsonFetch<Person[]>(`/api/users/search?q=${encodeURIComponent(query)}`).then(setResults);else setResults([]);},250);return()=>clearTimeout(timer);},[query]);
   async function request(userId:string){try{await jsonFetch("/api/friends",{method:"POST",body:JSON.stringify({userId})});setNotice("Заявка отправлена");await refresh();}catch{setNotice("Заявка уже существует");}}
   async function act(userId:string,action:"accept"|"reject"){await jsonFetch(`/api/friends/${userId}`,{method:"PATCH",body:JSON.stringify({action})});await refresh();}
@@ -475,13 +475,13 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
   </div>;
 }
 
-function Profile({user,avatar,onAvatarChange,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;onAvatarChange:(value:AvatarConfig)=>void;onOpenOnboarding:()=>void}) {
+function Profile({user,avatar,onOpenMaker,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;onOpenMaker:()=>void;onOpenOnboarding:()=>void}) {
   const [settings,setSettings]=useState({isDiscoverable:true,shareStreak:true,shareGoalHits:true,shareWorkouts:true,shareWeight:false,shareCalories:false,shareSteps:false,shareFood:false}); const [saved,setSaved]=useState(false);
   useEffect(()=>{jsonFetch<typeof settings>("/api/profile").then(v=>setSettings(s=>({...s,...v})));},[]);
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
   return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><CharacterAvatar value={avatar} size="medium" label="Твой персонаж"/><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
     <div className="profile-menu">
-      <details className="profile-group" name="profile-settings"><summary><span>🧑‍🎨</span><div><b>Мой персонаж</b><small>Внешность, одежда и аксессуары</small></div><i>›</i></summary><div className="profile-group-content"><AvatarEditor initial={avatar} onSaved={onAvatarChange}/></div></details>
+      <button className="profile-group profile-link" onClick={onOpenMaker}><span>🧑‍🎨</span><div><b>Мой персонаж</b><small>Внешность, одежда и аксессуары</small></div><i>›</i></button>
       <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Цель и дневная норма</b><small>Снизить, держать или набрать вес</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти полный расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
@@ -513,6 +513,8 @@ function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>vo
 export function RitmApp() {
   const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today"); const [headerCoins,setHeaderCoins]=useState(0); const [headerStreak,setHeaderStreak]=useState(0);
   const [avatar,setAvatar]=useState<Partial<AvatarConfig>|null>(null);
+  const [unlocked,setUnlocked]=useState<string[]>([]);
+  const [maker,setMaker]=useState(false);
   const updateHeader=useCallback((days:number,coins:number)=>{setHeaderStreak(days);setHeaderCoins(coins);},[]);
   const [onboarding,setOnboarding]=useState<"loading"|"show"|"done">("loading");
   const [onboardingUser,setOnboardingUser]=useState<string|null>(null);
@@ -521,10 +523,11 @@ export function RitmApp() {
   useEffect(()=>{
     if(!userId) return;
     // Определяем пояс браузером один раз. Если человек выбрал его руками, не трогаем.
-    void jsonFetch<{timezone?:string|null;onboardingCompleted?:boolean;avatarConfig?:Partial<AvatarConfig>|null}>("/api/profile").then(profile=>{
+    void jsonFetch<{timezone?:string|null;onboardingCompleted?:boolean;avatarConfig?:Partial<AvatarConfig>|null;avatarUnlocked?:string[]|null}>("/api/profile").then(profile=>{
       setOnboarding(profile.onboardingCompleted?"done":"show");
       setOnboardingUser(userId);
       setAvatar(profile.avatarConfig??null);
+      setUnlocked(profile.avatarUnlocked??[]);
       if(profile.timezone) return;
       const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
       return jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({timezone})});
@@ -537,10 +540,13 @@ export function RitmApp() {
   if(session.isPending)return <main className="loading"><div className="pulse">🔥</div></main>;
   if(!user)return <AuthScreen/>;
   if(onboarding==="loading"||onboardingUser!==userId)return <main className="loading"><div className="pulse">🔥</div></main>;
-  if(onboarding==="show")return <Onboarding onComplete={()=>{
+  if(onboarding==="show")return <Onboarding onComplete={value=>{
     setOnboarding("done");
+    setAvatar(value);
     setTab("today");
     void jsonFetch<{days:number;coins:number}>("/api/streak").then(result=>{setHeaderStreak(result.days);setHeaderCoins(result.coins);}).catch(()=>{});
   }}/>;
-  return <main className="app-shell"><header><div className="brand">Ритм</div><div className="header-status"><div className="header-streak" title={`${headerStreak} ${plural(headerStreak,"день","дня","дней")} подряд`}><span>🔥</span><b>{headerStreak}</b></div><CoinsChip coins={headerCoins}/><CharacterAvatar value={avatar} size="small" label="Твой персонаж"/></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today onStreak={updateHeader}/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user} avatar={avatar} onAvatarChange={setAvatar} onOpenOnboarding={()=>setOnboarding("show")}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
+  if(maker)return <AvatarEditor initial={avatar} coins={headerCoins} unlocked={unlocked}
+    onSaved={value=>{setAvatar(value);setMaker(false);}} onCoins={setHeaderCoins} onClose={()=>setMaker(false)}/>;
+  return <main className="app-shell"><header><div className="brand">Ритм</div><div className="header-status"><div className="header-streak" title={`${headerStreak} ${plural(headerStreak,"день","дня","дней")} подряд`}><span>🔥</span><b>{headerStreak}</b></div><CoinsChip coins={headerCoins}/><CharacterAvatar value={avatar} size="small" label="Твой персонаж"/></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today onStreak={updateHeader}/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user} avatar={avatar} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
 }

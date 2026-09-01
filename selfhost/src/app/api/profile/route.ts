@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { AVATAR_VALUES, normalizeAvatar } from "@/lib/avatar";
+import { AVATAR_VALUES, lockedSelections, normalizeAvatar } from "@/lib/avatar";
 
 const avatarSchema=z.object({
+  sex:z.enum(AVATAR_VALUES.sex),
   skin:z.enum(AVATAR_VALUES.skin),head:z.enum(AVATAR_VALUES.head),hair:z.enum(AVATAR_VALUES.hair),hairColor:z.enum(AVATAR_VALUES.hairColor),
   eyes:z.enum(AVATAR_VALUES.eyes),mouth:z.enum(AVATAR_VALUES.mouth),outfit:z.enum(AVATAR_VALUES.outfit),headwear:z.enum(AVATAR_VALUES.headwear),
   glasses:z.enum(AVATAR_VALUES.glasses),piercing:z.enum(AVATAR_VALUES.piercing),tattoo:z.enum(AVATAR_VALUES.tattoo),accessory:z.enum(AVATAR_VALUES.accessory),background:z.enum(AVATAR_VALUES.background),
@@ -49,7 +50,8 @@ export async function GET(request: Request) {
             timezone, calorie_goal as "calorieGoal",
             height_cm as "heightCm", sex, birth_year as "birthYear",
             activity_level as "activityLevel", target_weight_kg::float8 as "targetWeightKg",
-            goal_direction as "goalDirection", avatar_config as "avatarConfig", coins,
+            goal_direction as "goalDirection", avatar_config as "avatarConfig",
+            avatar_unlocked as "avatarUnlocked", coins,
             onboarding_completed as "onboardingCompleted"
        from profiles where user_id = $1`, [user.id]);
   return Response.json(result.rows[0]);
@@ -63,6 +65,12 @@ export async function PATCH(request: Request) {
   const current = await db.query(`select * from profiles where user_id = $1`, [user.id]);
   const old = current.rows[0] ?? {};
   const value = parsed.data;
+  // Платную деталь нельзя надеть, не купив её: покупка идёт только через
+  // /api/avatar/unlock, где списываются монеты.
+  if (value.avatarConfig) {
+    const blocked = lockedSelections(normalizeAvatar(value.avatarConfig), old.avatar_unlocked ?? []);
+    if (blocked.length) return Response.json({ error: "locked_item", categories: blocked }, { status: 402 });
+  }
   await db.query(
     `insert into profiles (user_id, bio, is_discoverable, share_streak, share_goal_hits, share_workouts, timezone, calorie_goal,
        height_cm, sex, birth_year, activity_level, target_weight_kg, onboarding_completed, goal_direction, avatar_config,

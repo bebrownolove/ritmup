@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CharacterAvatar } from "@/components/avatar-editor";
 import { normalizeAvatar, type AvatarConfig } from "@/lib/avatar";
+import { BG } from "@/lib/avatar-render";
 
 type Relationship = "self" | "friends" | "incoming" | "outgoing" | "none";
 type WeightPoint = { date:string; weightKg:number };
@@ -105,7 +106,7 @@ export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onC
       {!profile
         ? <div className="peek-loading">{failed?<p className="muted">Профиль не открылся. Возможно, человека больше нет.</p>:<div className="pulse">🔥</div>}</div>
         : <>
-        <div className={`peek-cover bg-${avatar!.background}`}><i/><em/></div>
+        <div className="peek-cover" style={{background:BG[avatar!.background]}}><i/><em/></div>
         <div className="peek-head">
           <CharacterAvatar value={profile.avatarConfig} size="large" label={`Персонаж ${profile.name}`}/>
           <h2>{profile.name}</h2>
