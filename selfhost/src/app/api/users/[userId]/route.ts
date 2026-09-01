@@ -26,7 +26,7 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
   const head = await db.query<Head>(
     `select u.id, u.name, u.username, p.avatar_config as "avatarConfig",
             coalesce(p.bio,'') as bio,
-            to_char(u."createdAt",'YYYY-MM-DD') as "joinedAt",
+            to_char(u."createdAt" at time zone coalesce(p.timezone,'UTC'),'YYYY-MM-DD') as "joinedAt",
             to_char((now() at time zone coalesce(p.timezone,'UTC'))::date,'YYYY-MM-DD') as today,
             coalesce(p.share_streak,true) as "shareStreak",
             coalesce(p.share_goal_hits,true) as "shareGoalHits",
@@ -108,7 +108,7 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
                   coalesce(l.active_calories,0)::int as "activeCalories", l.weight_kg::float8 as "weightKg",
                   coalesce(food.items,'[]'::json) as food,
                   coalesce(work.items,'[]'::json) as workouts
-             from generate_series($2::date - 13, $2::date, interval '1 day') as d(day)
+             from generate_series(greatest($2::date - 13,$3::date), $2::date, interval '1 day') as d(day)
              cross join profiles p
              left join daily_logs l on l.user_id=p.user_id and l.log_date=d.day
              left join lateral (
@@ -119,7 +119,7 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
                select json_agg(json_build_object('title',x.title,'minutes',x.minutes,'calories',x.calories) order by x.created_at) as items
                  from workouts x where x.user_id=$1 and x.log_date=d.day
              ) work on true
-            where p.user_id=$1 order by d.day desc`, [person.id, person.today])
+            where p.user_id=$1 order by d.day desc`, [person.id, person.today, person.joinedAt])
       : null,
   ] as const);
 
