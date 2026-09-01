@@ -21,27 +21,11 @@ function plural(count:number, one:string, few:string, many:string) {
   return many;
 }
 
+/** 1 840 вместо 1840 — так число читается с одного взгляда. */
+function spaced(value:number) { return value.toLocaleString("ru-RU").replace(/\u00a0/g,"\u202f"); }
+
 function shortDate(date:string) {
   return new Date(`${date}T00:00`).toLocaleDateString("ru",{day:"numeric",month:"short"});
-}
-
-/** Столбики съеденного: выше нормы — красный, у нормы — янтарный. */
-function CalorieBars({days}:{days:HistoryDay[]}) {
-  const peak=Math.max(...days.map(day=>Math.max(day.caloriesEaten,day.calorieGoal)),1);
-  const goal=days[days.length-1]?.calorieGoal??2000;
-  return <>
-    <div className="bars">
-      <i className="goal-line" style={{bottom:`${goal/peak*100}%`}}><em>{goal}</em></i>
-      {days.map(day=>{
-        const share=day.caloriesEaten/peak*100;
-        const state=day.caloriesEaten===0?"empty":day.caloriesEaten>day.calorieGoal?"over":day.caloriesEaten>=day.calorieGoal*0.9?"close":"ok";
-        return <div key={day.date} className="bar-slot" title={`${shortDate(day.date)}: ${day.caloriesEaten?`${day.caloriesEaten} из ${day.calorieGoal} ккал`:"нет записей"}`}>
-          <div className={`bar ${state}`} style={{height:state==="empty"?"4px":`${Math.max(share,3)}%`}}/>
-        </div>;
-      })}
-    </div>
-    <div className="bars-axis"><span>{shortDate(days[0].date)}</span><span>{shortDate(days[days.length-1].date)}</span></div>
-  </>;
 }
 
 function WeightChart({days}:{days:HistoryDay[]}) {
@@ -73,45 +57,67 @@ export function StatsScreen() {
   const steps=withSteps.reduce((sum,day)=>sum+(day.steps??0),0);
   const weighed=days.filter(day=>day.weightKg!==null);
   const weightChange=weighed.length>1?weighed[weighed.length-1].weightKg!-weighed[0].weightKg!:null;
+  const goal=days[days.length-1]?.calorieGoal??2000;
+  // В тёмной карточке показываем последнюю неделю: 90 столбиков туда не влезут.
+  const bars=days.slice(-7);
+  const peak=Math.max(...bars.map(day=>Math.max(day.caloriesEaten,1)),1);
 
-  return <section className="screen slide-up">
-    <div className="hero-row stats-hero"><div><p className="eyebrow">СТАТИСТИКА</p><h2>Как идут дела</h2></div>
-      <div className="range-switch">{[7,30,90].map(value=>
-        <button key={value} className={range===value?"active":""} onClick={()=>setRange(value)}>{value} дней</button>)}</div>
+  return <section className="screen">
+    <div className="segmented" role="tablist" aria-label="Период">
+      {([[7,"Неделя"],[30,"Месяц"],[90,"Год"]] as [number,string][]).map(([value,label])=>
+        <button key={value} role="tab" aria-selected={range===value} className={range===value?"active":""} onClick={()=>setRange(value)}>{label}</button>)}
     </div>
 
-    <div className="stat-grid">
-      <div><b>{logged.length}</b><small>{plural(logged.length,"день","дня","дней")} с записями</small></div>
-      <div><b>{averageEaten||"—"}</b><small>ккал в среднем</small></div>
-      <div><b>{logged.length?`${withinGoal}/${logged.length}`:"—"}</b><small>{plural(withinGoal,"день","дня","дней")} в норме</small></div>
-      <div><b>{minutes}</b><small>{plural(minutes,"минута","минуты","минут")} тренировок</small></div>
-    </div>
-
-    <div className="list-card">
-      <h3>Калории по дням</h3>
-      <CalorieBars days={days}/>
-      <p className="muted small">Пунктир — твой ориентир. Коралловые столбики — дни выше него.</p>
-    </div>
-
-    <div className="list-card">
-      <h3>Вес{weightChange!==null&&<small> · {weightChange>0?"+":""}{weightChange.toFixed(1)} кг за период</small>}</h3>
-      <WeightChart days={days}/>
-    </div>
-
-    {steps>0&&<div className="list-card"><h3>Шаги</h3>
-      <div className="stat-grid two"><div><b>{steps.toLocaleString("ru")}</b><small>всего</small></div>
-        <div><b>{Math.round(steps/withSteps.length).toLocaleString("ru")}</b><small>в среднем за день с данными</small></div></div></div>}
-
-    <div className="list-card">
-      <h3>Последние дни</h3>
-      {[...days].reverse().slice(0,14).map(day=>
-        <div className="day-row" key={day.date}>
-          <span>{shortDate(day.date)}</span>
-          <em className={day.caloriesEaten===0?"none":day.caloriesEaten>day.calorieGoal?"over":"ok"}>
-            {day.caloriesEaten?`${day.caloriesEaten} ккал`:"нет записей"}</em>
-          <b>{day.weightKg?`${day.weightKg.toFixed(1)} кг`:""}</b>
-          <i>{day.workoutMinutes?`${day.workoutMinutes} мин`:""}</i>
+    <div className="hero-dark">
+      <p className="eyebrow">СРЕДНЕЕ ЗА {range===7?"НЕДЕЛЮ":range===30?"МЕСЯЦ":"ГОД"}</p>
+      <b className="big">{averageEaten?`${spaced(averageEaten)} ккал`:"нет данных"}</b>
+      <p>{logged.length
+        ? `Цель ${spaced(goal)} — держишься ниже ${withinGoal} ${plural(withinGoal,"день","дня","дней")} из ${logged.length}.`
+        : "Начни записывать еду, и здесь появится картина недели."}</p>
+      {bars.length>0&&<div className="bars-dark" style={{marginTop:16}}>
+        {bars.map(day=><div key={day.date}>
+          <i className={day.caloriesEaten===0?"none":day.caloriesEaten>day.calorieGoal?"peak":""}
+             style={{height:`${Math.max(day.caloriesEaten/peak*100,6)}%`}}/>
+          <small>{new Date(`${day.date}T00:00`).toLocaleDateString("ru",{weekday:"short"})}</small>
         </div>)}
+      </div>}
+    </div>
+
+    <div className="tiles stats-tiles">
+      <div className="tile">
+        <p className="eyebrow">ШАГИ В ДЕНЬ</p>
+        <b>{withSteps.length?spaced(Math.round(steps/withSteps.length)):"—"}</b>
+        <small>{withSteps.length?`за ${withSteps.length} ${plural(withSteps.length,"день","дня","дней")} с данными`:"нет данных"}</small>
+      </div>
+      <div className="tile">
+        <p className="eyebrow">ТРЕНИРОВКИ</p>
+        <b>{minutes}</b>
+        <small>{plural(minutes,"минута","минуты","минут")} за период</small>
+      </div>
+      <div className="tile" style={{gridColumn:"1/-1"}}>
+        <p className="eyebrow">ВЕС</p>
+        <b>{weighed.length?`${weighed[weighed.length-1].weightKg!.toFixed(1).replace(".",",")} кг`:"—"}</b>
+        <small className={weightChange!==null&&weightChange<0?"up":""}>
+          {weightChange===null?"запиши вес хотя бы дважды"
+            :`${weightChange>0?"+":"−"}${Math.abs(weightChange).toFixed(1).replace(".",",")} кг за период`}</small>
+        <WeightChart days={days}/>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Последние дни</h3></div>
+      {[...days].reverse().slice(0,14).map(day=>{
+        const over=day.caloriesEaten>day.calorieGoal, none=day.caloriesEaten===0;
+        return <div className="day-item" key={day.date}>
+          <i className={none?"none":over?"over":""}/>
+          <b>{shortDate(day.date)}
+            <small className={over?"over":""}>
+              {none?"записей нет":over?`превысил норму на ${spaced(day.caloriesEaten-day.calorieGoal)}`
+                :`в норме${day.workoutMinutes?` · ${day.workoutMinutes} мин спорта`:""}`}
+            </small></b>
+          <em className={none?"none":over?"over":""}>{none?"—":spaced(day.caloriesEaten)}</em>
+        </div>;
+      })}
     </div>
   </section>;
 }

@@ -52,13 +52,6 @@ export function Milestone({streak}:{streak:number}) {
 
 type RepairState={cost:number;coins:number;missed:string[]};
 
-/** Монеты в шапке: цифра всегда на виду, но места не занимает. */
-export function CoinsChip({coins}:{coins:number}) {
-  return <div className="coins-chip" title={`${coins} ${plural(coins,"очко","очка","очков")}`}>
-    <span aria-hidden>🪙</span><b>{coins}</b>
-  </div>;
-}
-
 export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) {
   const [state,setState]=useState<RepairState|null>(null);
   const [open,setOpen]=useState(false);
@@ -104,19 +97,28 @@ type Player={id:string;name:string;username:string|null;avatarConfig?:Partial<Av
 export function Leaderboard({onOpen}:{onOpen?:(userId:string)=>void}) {
   const [rows,setRows]=useState<Player[]>([]);
   useEffect(()=>{void api<Player[]>("/api/leaderboard").then(setRows).catch(()=>{});},[]);
-  if(rows.length===0) return <div className="list-card"><h3>Общий рейтинг</h3>
+  const myPlace=rows.findIndex(player=>player.isSelf)+1;
+  if(rows.length===0) return <div className="card"><div className="card-head"><h3>Общий рейтинг</h3></div>
     <div className="empty"><span>🏅</span><p>Пока в рейтинге никого нет</p></div></div>;
-  return <div className="list-card">
-    <h3>Общий рейтинг <small>{rows.length} участников</small></h3>
-    {rows.map((player,index)=>
-      <div className={`rank-row${player.isSelf?" me":""}`} key={player.id}>
-        <span className="place">{index===0?"🥇":index===1?"🥈":index===2?"🥉":index+1}</span>
-        <CharacterAvatar value={player.avatarConfig} size="small" label={`Персонаж ${player.name}`}/>
-        <button type="button" className="rank-name" onClick={()=>onOpen?.(player.id)} disabled={!onOpen}>
-          <b>{player.name}</b><small>@{player.username??"без ника"}</small></button>
-        <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
-        <i>{player.workoutMinutes===null?"тренировки скрыты":`${player.workoutMinutes} мин`}</i>
-      </div>)}
-    <p className="muted small">Здесь все пользователи Ритма. Если человек скрыл серию или тренировки, вместо числа показывается «скрыто».</p>
-  </div>;
+  return <>
+    <div className="hero-dark" style={{textAlign:"center"}}>
+      <p className="eyebrow">ОБЩИЙ РЕЙТИНГ · {rows.length} {plural(rows.length,"участник","участника","участников")}</p>
+      <h2>{myPlace?`Ты на ${myPlace} месте`:"Ты вне рейтинга"}</h2>
+      <p>Место считается по длине серии, дальше — по минутам тренировок.</p>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {rows.map((player,index)=>
+        <button type="button"
+          className={`rank${player.isSelf?" me":""}${index===0?" gold":""}${index>=5&&!player.isSelf?" out":""}`}
+          key={player.id} onClick={()=>onOpen?.(player.id)} disabled={!onOpen}>
+          <b>{index+1}</b>
+          <CharacterAvatar value={player.avatarConfig} size="small" label={`Персонаж ${player.name}`}/>
+          <span className="rank-name">
+            <b>{player.isSelf?"Ты":player.name}</b>
+            <small>{player.workoutMinutes===null?"тренировки скрыты":`${player.workoutMinutes} мин за неделю`}</small>
+          </span>
+          <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
+        </button>)}
+    </div>
+  </>;
 }

@@ -63,7 +63,7 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
     food: forFriend(person.shareFood),
   };
 
-  const [streak, counters, day, weight, workoutMinutes, workouts, food] = await Promise.all([
+  const [streak, counters, day, weight, workoutMinutes, workouts, food, history] = await Promise.all([
     shares.streak ? currentStreak(person.id) : null,
     db.query<{ logged: number; hits: number; tracked: number }>(
       `select count(*) filter (where calories_eaten>0 or weight_kg is not null)::int as logged,
@@ -98,7 +98,19 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
           `select title, calories from food_entries
             where user_id=$1 and log_date=$2::date order by created_at`, [person.id, person.today])
       : null,
-  ]);
+    // Вкладка «История»: последние две недели с нормой каждого дня, чтобы
+    // на экране было видно, где человек её превысил.
+    shares.calories
+      ? db.query<{ date: string; calories: number; goal: number; steps: number | null }>(
+          `select to_char(d.day,'YYYY-MM-DD') as date,
+                  coalesce(l.calories_eaten,0)::int as calories,
+                  coalesce(l.calorie_goal,p.calorie_goal,2000)::int as goal, l.steps
+             from generate_series($2::date - 13, $2::date, interval '1 day') as d(day)
+             cross join profiles p
+             left join daily_logs l on l.user_id=p.user_id and l.log_date=d.day
+            where p.user_id=$1 order by d.day desc`, [person.id, person.today])
+      : null,
+  ] as const);
 
   const points = weight ? [...weight.rows].reverse() : null;
   const stats = counters.rows[0];
@@ -133,5 +145,6 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
     },
     workoutMinutes: workoutMinutes ? workoutMinutes.rows[0].total : null,
     workouts: workouts ? workouts.rows : null,
+    history: history ? history.rows : null,
   });
 }

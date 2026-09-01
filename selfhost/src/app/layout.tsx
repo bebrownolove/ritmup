@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Nunito } from "next/font/google";
 import { ServiceWorker } from "@/components/service-worker";
 import "./globals.css";
 import "./mobile.css";
+// Слой редизайна идёт последним и перекрывает прежние правила.
+import "./design.css";
+
+// Шрифт макета. next/font сам хостит файлы и снимает лишний запрос к Google.
+const nunito = Nunito({ subsets: ["cyrillic", "latin"], weight: ["400","600","700","800","900"], display: "swap", variable: "--font-nunito" });
 
 export const metadata: Metadata = {
   title: "Ритм — дневник питания и привычек",
@@ -27,8 +33,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru">
-      <head><script dangerouslySetInnerHTML={{__html:`try{const t=localStorage.getItem('ritm-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}`}}/></head>
+    <html lang="ru" className={nunito.variable}>
+      <head>
+        <script dangerouslySetInnerHTML={{__html:`try{const t=localStorage.getItem('ritm-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}`}}/>
+      </head>
       <body>{children}<ServiceWorker /></body>
     </html>
   );

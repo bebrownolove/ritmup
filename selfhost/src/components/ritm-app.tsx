@@ -4,9 +4,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
-import { CoinsChip, Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
+import { Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
 import { Onboarding } from "@/components/onboarding";
 import { FriendProfileSheet } from "@/components/friend-profile";
+import { BarsIcon, CoinIcon, FlameIcon, FriendsIcon, HomeIcon, PersonIcon } from "@/components/icons";
 import { basalRate, goalCalories, maintenance } from "@/lib/body";
 import { AvatarEditor, CharacterAvatar } from "@/components/avatar-editor";
 import type { AvatarConfig } from "@/lib/avatar";
@@ -49,6 +50,9 @@ function todayKey(date=new Date()) {
   const day=String(date.getDate()).padStart(2,"0");
   return `${year}-${month}-${day}`;
 }
+
+/** 1 380 вместо 1380 — крупные числа на экране читаются с одного взгляда. */
+function spaced(value:number) { return value.toLocaleString("ru-RU").replace(/\u00a0/g,"\u202f"); }
 
 async function jsonFetch<T>(url:string, init?:RequestInit):Promise<T> {
   const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}});
@@ -222,8 +226,33 @@ function WorkoutsCard({date}:{date:string}) {
   </div>;
 }
 
-function Today({onStreak}:{onStreak?:(days:number,coins:number)=>void}) {
+/** «ЧЕТВЕРГ, 12 ИЮНЯ» — надзаголовок тёмной карточки. */
+function weekdayLine(now=new Date()) {
+  return now.toLocaleDateString("ru",{weekday:"long",day:"numeric",month:"long"}).toUpperCase();
+}
+
+/** Стикер по названию блюда: чуть живее, чем одна вилка на всё. */
+function mealSticker(title:string) {
+  const text=title.toLowerCase();
+  if(/кофе|латте|чай|капучино|americano|американо/.test(text)) return "☕";
+  if(/суп|борщ|бульон|лапш|рамен|похлёб/.test(text)) return "🍜";
+  if(/салат|овощ|огур|помидор|капуст/.test(text)) return "🥗";
+  if(/каша|овсян|гранол|мюсли|йогурт|творог/.test(text)) return "🥣";
+  if(/яблок|банан|ягод|фрукт|груш|апельсин|клубник/.test(text)) return "🍓";
+  if(/мясо|курин|курица|котлет|стейк|говядин|свинин/.test(text)) return "🍗";
+  if(/хлеб|булк|бутер|сэндвич|тост|горбушк/.test(text)) return "🥪";
+  if(/торт|шоколад|конфет|печен|пирож|десерт|мороже/.test(text)) return "🍰";
+  if(/паст|макарон|спагетт|рис|греч|картош/.test(text)) return "🍝";
+  return "🍽️";
+}
+
+type WeekCell = { date:string; label:string; state:"ok"|"over"|"today"|"future"|"empty" };
+
+function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=>void;avatar?:Partial<AvatarConfig>|null;userName:string}) {
   const date=todayKey();
+  const [adding,setAdding]=useState(false);
+  const [week,setWeek]=useState<WeekCell[]>([]);
+  const firstName=userName.split(" ")[0]||userName;
   const [section,setSection]=useState<"food"|"movement"|"weight">("food");
   const [entries,setEntries]=useState<Entry[]>([]); const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
   const [busy,setBusy]=useState(false);
@@ -239,16 +268,12 @@ function Today({onStreak}:{onStreak?:(days:number,coins:number)=>void}) {
   const healthFreshness=health.healthSyncedAt
     ? `Обновлено в ${new Date(health.healthSyncedAt).toLocaleTimeString("ru",{hour:"2-digit",minute:"2-digit"})} ✓`
     : "Пока не подключено";
-  const caloriesLeft=Math.max(0,goal-total);
-  const dayMessage=total===0
-    ? {title:"Начни с первой записи",text:"Добавь то, что уже съел. Не обязательно заполнять всё сразу."}
-    : ringState==="over"
-      ? {title:"Сегодня выше ориентира",text:"Ничего страшного. Один день ничего не решает — завтра просто продолжим."}
-      : ringState==="close"
-        ? {title:"Почти готово",text:`До твоего ориентира осталось ${caloriesLeft} ккал.`}
-        : percent<50
-          ? {title:"Хорошее начало",text:`На сегодня осталось примерно ${caloriesLeft} ккал.`}
-          : {title:"Всё идёт по плану",text:`На сегодня осталось примерно ${caloriesLeft} ккал.`};
+  // Формула макета: осталось = норма − съедено + сожжено на тренировках.
+  const burned=health.activeCalories||0;
+  const left=goal-total+burned;
+  const streakLine=streak===0
+    ? "Отметь сегодняшний день — и серия начнётся."
+    : `${streak===1?"Первый день":`${streak}-й день`} подряд. Так держать.`;
   // Записи живут на сервере. В localStorage их держать нельзя: при уходе со вкладки
   // компонент размонтируется, и сохранение пустого списка затирало данные.
   useEffect(()=>{void jsonFetch<Entry[]>(`/api/food-entries?date=${date}`).then(setEntries).catch(()=>{});},[date]);
@@ -257,6 +282,18 @@ function Today({onStreak}:{onStreak?:(days:number,coins:number)=>void}) {
     void jsonFetch<{days:number;coins:number}>("/api/streak").then(result=>{setStreak(result.days);setCoins(result.coins);onStreak?.(result.days,result.coins);}).catch(()=>{});
   },[date,onStreak]);
   useEffect(()=>{refreshDay();},[refreshDay]);
+  // Полоса недели: последние 5 дней из истории, статус считается от нормы дня.
+  useEffect(()=>{
+    void jsonFetch<{date:string;caloriesEaten:number;calorieGoal:number}[]>("/api/history?days=7").then(days=>{
+      setWeek(days.slice(-5).map(day=>({
+        date:day.date,
+        label:new Date(`${day.date}T00:00`).toLocaleDateString("ru",{weekday:"short"}),
+        state:day.date===date?"today"
+          :day.caloriesEaten===0?"empty"
+          :day.caloriesEaten>day.calorieGoal?"over":"ok",
+      })));
+    }).catch(()=>{});
+  },[date,entries.length]);
   useEffect(()=>{
     const detect=()=>setHealthAvailable(Boolean(window.ritmHealthKitAvailable&&window.webkit?.messageHandlers?.ritmHealth));
     const receive=(event:Event)=>{void (async()=>{
@@ -291,18 +328,59 @@ function Today({onStreak}:{onStreak?:(days:number,coins:number)=>void}) {
     await jsonFetch(`/api/food-entries?id=${encodeURIComponent(id)}`,{method:"DELETE"}).catch(()=>{});
     refreshDay();
   }
-  return <section className="screen slide-up">
-    <div className="hero-row"><div><p className="eyebrow">СЕГОДНЯ</p><h2>Держим ритм</h2><p className="muted">День завершится сам в полночь.</p></div></div>
-    <div className="progress-card"><div className={`ring ${ringState}`} style={{"--progress":`${percent*3.6}deg`} as React.CSSProperties}><div><b>{total}</b><small>из {goal} ккал</small></div></div><div><h3>{dayMessage.title}</h3><p>{dayMessage.text}</p></div></div>
-    <Milestone streak={streak}/>
-    <div className="day-switch" role="tablist" aria-label="Раздел дневника">
-      <button role="tab" className={section==="food"?"active":""} aria-selected={section==="food"} onClick={()=>setSection("food")}><span>🍽️</span>Питание</button>
-      <button role="tab" className={section==="movement"?"active":""} aria-selected={section==="movement"} onClick={()=>setSection("movement")}><span>🏃</span>Движение</button>
-      <button role="tab" className={section==="weight"?"active":""} aria-selected={section==="weight"} onClick={()=>setSection("weight")}><span>⚖️</span>Вес</button>
+  return <section className="screen">
+    <div className="hero-dark today-hero">
+      <CharacterAvatar value={avatar} size="large" label="Твой персонаж"/>
+      <div>
+        <p className="eyebrow">{weekdayLine()}</p>
+        <h2>Привет, {firstName}</h2>
+        <p>{streakLine}</p>
+      </div>
+    </div>
+
+    <div className="week-strip">{week.map(day=>
+      <span key={day.date} className={`week-day ${day.state}`}>{day.label}<i/></span>)}</div>
+
+    <div className={`calorie-card${ringState==="over"?" over":""}`}>
+      <div className="calorie-ring" style={{"--progress":`${percent*3.6}deg`,"--ring-color":ringState==="over"?"var(--red)":"var(--green)"} as React.CSSProperties}>
+        <b>{percent}%</b>
+      </div>
+      <div>
+        <p className="eyebrow">{left>0?"ОСТАЛОСЬ СЕГОДНЯ":"НОРМА ИСЧЕРПАНА"}</p>
+        <b className="calorie-left">{spaced(Math.abs(left))} ккал</b>
+        <div className="calorie-formula">
+          <small>норма {spaced(goal)}</small>
+          <small className="eaten">− {spaced(total)} еда</small>
+          {burned>0&&<small className="burned">+ {spaced(burned)} спорт</small>}
+        </div>
+      </div>
+    </div>
+
+    <div className="segmented" role="tablist" aria-label="Раздел дневника">
+      <button role="tab" className={section==="food"?"active":""} aria-selected={section==="food"} onClick={()=>setSection("food")}>Питание</button>
+      <button role="tab" className={section==="movement"?"active":""} aria-selected={section==="movement"} onClick={()=>setSection("movement")}>Движение</button>
+      <button role="tab" className={section==="weight"?"active":""} aria-selected={section==="weight"} onClick={()=>setSection("weight")}>Вес</button>
     </div>
     {section==="food"&&<div className="day-panel slide-up">
-      <form className="quick-add" onSubmit={add}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что съел? Например, клубника"/><input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/><button className="primary" disabled={busy}>{busy?"…":"Добавить"}</button></form>
-      <div className="list-card"><h3>Сегодня</h3>{entries.length===0?<div className="empty"><span>🍓</span><p>Запиши первый приём пищи — дальше будет проще</p></div>:entries.map((item,index)=><div className="entry" key={item.id} style={{animationDelay:`${index*60}ms`}}><span>🍽️</span><b>{item.title}</b><em>{item.calories} ккал</em><button onClick={()=>void remove(item.id)}>×</button></div>)}</div>
+      <div className="card">
+        <div className="card-head"><h3>Сегодня</h3><small>{entries.length} {plural(entries.length,"запись","записи","записей")} · {spaced(total)} ккал</small></div>
+        {entries.length===0
+          ? <div className="empty"><span>🍓</span><p>Запиши первый приём пищи — дальше будет проще</p></div>
+          : entries.map(item=><div className="entry-row" key={item.id}>
+              <span aria-hidden>{mealSticker(item.title)}</span>
+              <span className="entry-name"><b>{item.title}</b></span>
+              <em>{item.calories}</em>
+              <button className="remove" onClick={()=>void remove(item.id)} aria-label="Удалить">×</button>
+            </div>)}
+        {adding
+          ? <form className="quick-add" onSubmit={add} style={{marginTop:12}}>
+              <input value={title} onChange={e=>setTitle(e.target.value)} autoFocus placeholder="Что съел? Например, клубника"/>
+              <input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/>
+              <button className="btn-primary" disabled={busy}>{busy?"…":"Добавить"}</button>
+            </form>
+          : <button className="btn-primary" style={{marginTop:12}} onClick={()=>setAdding(true)}>Добавить еду</button>}
+      </div>
+      <Milestone streak={streak}/>
       <RepairCard coins={coins} onChanged={refreshDay}/>
     </div>}
     {section==="movement"&&<div className="day-panel slide-up">
@@ -329,12 +407,30 @@ function Friends() {
   async function request(userId:string){try{await jsonFetch("/api/friends",{method:"POST",body:JSON.stringify({userId})});setNotice("Заявка отправлена");await refresh();}catch{setNotice("Заявка уже существует");}}
   async function act(userId:string,action:"accept"|"reject"){await jsonFetch(`/api/friends/${userId}`,{method:"PATCH",body:JSON.stringify({action})});await refresh();}
   const incoming=people.filter(p=>p.status==="pending"&&!p.sentByMe); const accepted=people.filter(p=>p.status==="accepted");
-  return <section className="screen slide-up"><div className="hero-row"><div><p className="eyebrow">ВМЕСТЕ ВЕСЕЛЕЕ</p><h2>Друзья</h2></div><div className="buddy-bubbles"><span>🐼</span><span>🦊</span><span>🐸</span></div></div>
-    <div className="search-card"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Найти по нику или имени"/>{notice&&<small>{notice}</small>}{results.map(person=><PersonRow key={person.id} person={person} onOpen={()=>setPeek(person.id)} action={person.relationship==="none"?<button onClick={()=>request(person.id)}>Добавить</button>:<span className="status">{person.relationship==="friends"?"Уже друзья":"Заявка отправлена"}</span>}/>)}</div>
-    {incoming.length>0&&<div className="list-card"><h3>Заявки</h3>{incoming.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
-    <div className="list-card"><h3>Твои друзья · {accepted.length}</h3>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
+  const [invited,setInvited]=useState("");
+  /** Делимся ссылкой на приложение: системный лист, а где его нет — буфер обмена. */
+  async function invite(){
+    const url=window.location.origin;
+    const text="Веду дневник питания в Ритме — присоединяйся";
+    try{
+      if(navigator.share){await navigator.share({title:"Ритм",text,url});return;}
+      await navigator.clipboard.writeText(`${text}: ${url}`);
+      setInvited("Ссылка скопирована ✓");
+    }catch{setInvited("");}
+    setTimeout(()=>setInvited(""),2200);
+  }
+  return <section className="screen" style={{paddingBottom:78}}>
     <Leaderboard onOpen={setPeek}/>
-    <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> добавил тренировку · {event.payload.minutes??0} мин</>:<><b>{event.name}</b> уже {event.payload.days??1} {plural(event.payload.days??1,"день","дня","дней")} подряд</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся успехи друзей</p></div>}</div>
+    <div className="card">
+      <div className="card-head"><h3>Найти человека</h3></div>
+      <input className="search-input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Ник или имя"/>
+      {notice&&<small className="health-status">{notice}</small>}
+      {results.map(person=><PersonRow key={person.id} person={person} onOpen={()=>setPeek(person.id)} action={person.relationship==="none"?<button onClick={()=>request(person.id)}>Добавить</button>:<span className="status">{person.relationship==="friends"?"Уже друзья":"Заявка отправлена"}</span>}/>)}
+    </div>
+    {incoming.length>0&&<div className="card"><div className="card-head"><h3>Заявки</h3></div>{incoming.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
+    <div className="card"><div className="card-head"><h3>Твои друзья</h3><small>{accepted.length}</small></div>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
+    <div className="card"><div className="card-head"><h3>Активность</h3></div>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> добавил тренировку · {event.payload.minutes??0} мин</>:<><b>{event.name}</b> уже {event.payload.days??1} {plural(event.payload.days??1,"день","дня","дней")} подряд</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся успехи друзей</p></div>}</div>
+    <div className="floating"><button className="btn-primary lg" onClick={()=>void invite()}>{invited||"Позвать друга"}</button></div>
     {peek&&<FriendProfileSheet userId={peek} onClose={()=>setPeek(null)} onChanged={()=>void refresh()}/>}
   </section>;
 }
@@ -475,11 +571,55 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
   </div>;
 }
 
-function Profile({user,avatar,onOpenMaker,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;onOpenMaker:()=>void;onOpenOnboarding:()=>void}) {
+function Profile({user,avatar,coins,streak,onOpenMaker,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;coins:number;streak:number;onOpenMaker:()=>void;onOpenOnboarding:()=>void}) {
   const [settings,setSettings]=useState({isDiscoverable:true,shareStreak:true,shareGoalHits:true,shareWorkouts:true,shareWeight:false,shareCalories:false,shareSteps:false,shareFood:false}); const [saved,setSaved]=useState(false);
+  const [weightChange,setWeightChange]=useState<number|null>(null);
+  const [joined,setJoined]=useState("");
+  const [totals,setTotals]=useState({loggedDays:0,goalDays:0,workoutMinutes:0});
   useEffect(()=>{jsonFetch<typeof settings>("/api/profile").then(v=>setSettings(s=>({...s,...v})));},[]);
+  // Достижения считаем из истории — отдельной таблицы под них заводить не нужно.
+  useEffect(()=>{
+    void jsonFetch<{date:string;caloriesEaten:number;calorieGoal:number;weightKg:number|null;workoutMinutes:number}[]>("/api/history?days=30")
+      .then(days=>{
+        const weighed=days.filter(day=>day.weightKg!==null);
+        setWeightChange(weighed.length>1?weighed[weighed.length-1].weightKg!-weighed[0].weightKg!:null);
+        setJoined(days.length?new Date(`${days[0].date}T00:00`).toLocaleDateString("ru",{month:"long"}):"");
+        setTotals({
+          loggedDays:days.filter(day=>day.caloriesEaten>0).length,
+          goalDays:days.filter(day=>day.caloriesEaten>0&&day.caloriesEaten<=day.calorieGoal).length,
+          workoutMinutes:days.reduce((sum,day)=>sum+day.workoutMinutes,0),
+        });
+      }).catch(()=>{});
+  },[]);
+  const badges=[
+    {key:"streak",icon:"🏅",tone:"warm",title:"Неделя подряд",earned:streak>=7},
+    {key:"goal",icon:"🥗",tone:"",title:"10 дней в своей норме",earned:totals.goalDays>=10},
+    {key:"sport",icon:"🏃",tone:"cool",title:"100 минут тренировок за месяц",earned:totals.workoutMinutes>=100},
+    {key:"log",icon:"📖",tone:"warm",title:"20 дней с записями",earned:totals.loggedDays>=20},
+  ];
   async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
-  return <section className="screen slide-up"><p className="eyebrow">ПРОФИЛЬ</p><div className="profile-head"><CharacterAvatar value={avatar} size="medium" label="Твой персонаж"/><div><h2>{user.name}</h2><p>@{user.username??"ник"} · {user.email}</p></div></div>
+  return <section className="screen">
+    <div className="hero-dark profile-hero">
+      <CharacterAvatar value={avatar} size="large" label="Твой персонаж"/>
+      <div>
+        <h2>{user.name}</h2>
+        <p>@{user.username??"ник"}{joined&&` · в Ритме с ${joined}`}</p>
+      </div>
+      <button className="btn-edit" onClick={onOpenMaker}>Изменить персонажа</button>
+    </div>
+
+    <div className="tiles three">
+      <div className="tile"><b>{streak}</b><small>{plural(streak,"день","дня","дней")} подряд</small></div>
+      <div className="tile"><b>{coins}</b><small>{plural(coins,"монета","монеты","монет")}</small></div>
+      <div className="tile"><b>{weightChange===null?"—":`${weightChange>0?"+":"−"}${Math.abs(weightChange).toFixed(1).replace(".",",")}`}</b><small>кг за месяц</small></div>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Достижения</h3><small>{badges.filter(b=>b.earned).length} из {badges.length}</small></div>
+      <div className="badges">{badges.map(badge=>
+        <span key={badge.key} className={`badge ${badge.earned?badge.tone:"off"}`} title={badge.title} aria-label={badge.title}>{badge.earned?badge.icon:"🔒"}</span>)}</div>
+    </div>
+
     <div className="profile-menu">
       <button className="profile-group profile-link" onClick={onOpenMaker}><span>🧑‍🎨</span><div><b>Мой персонаж</b><small>Внешность, одежда и аксессуары</small></div><i>›</i></button>
       <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Цель и дневная норма</b><small>Снизить, держать или набрать вес</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти полный расчёт заново</button></div></details>
@@ -548,5 +688,30 @@ export function RitmApp() {
   }}/>;
   if(maker)return <AvatarEditor initial={avatar} coins={headerCoins} unlocked={unlocked}
     onSaved={value=>{setAvatar(value);setMaker(false);}} onCoins={setHeaderCoins} onClose={()=>setMaker(false)}/>;
-  return <main className="app-shell"><header><div className="brand">Ритм</div><div className="header-status"><div className="header-streak" title={`${headerStreak} ${plural(headerStreak,"день","дня","дней")} подряд`}><span>🔥</span><b>{headerStreak}</b></div><CoinsChip coins={headerCoins}/><CharacterAvatar value={avatar} size="small" label="Твой персонаж"/></div></header><div className="content"><InstallHint/>{tab==="today"&&<Today onStreak={updateHeader}/>} {tab==="stats"&&<StatsScreen/>} {tab==="friends"&&<Friends/>} {tab==="profile"&&<Profile user={user} avatar={avatar} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}</div><nav><button className={tab==="today"?"active":""} onClick={()=>setTab("today")}><span>◉</span>Сегодня</button><button className={tab==="stats"?"active":""} onClick={()=>setTab("stats")}><span>▤</span>Статистика</button><button className={tab==="friends"?"active":""} onClick={()=>setTab("friends")}><span>♣</span>Друзья</button><button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}><span>●</span>Профиль</button></nav></main>;
+  const navItems:[Tab,React.ReactNode,string][]=[
+    ["today",<HomeIcon key="h"/>,"Сегодня"],
+    ["stats",<BarsIcon key="b"/>,"Статистика"],
+    ["friends",<FriendsIcon key="f"/>,"Друзья"],
+    ["profile",<PersonIcon key="p"/>,"Профиль"],
+  ];
+  return <main className="app-shell">
+    <header>
+      {tab==="today"
+        ? <div className="brand"><span className="brand-mark" aria-hidden>Р</span>Ритм</div>
+        : <b className="screen-title">{tab==="stats"?"Статистика":tab==="friends"?"Друзья":"Профиль"}</b>}
+      <div className="header-status">
+        <span className="chip chip-streak" title={`${headerStreak} ${plural(headerStreak,"день","дня","дней")} подряд`}><FlameIcon/>{headerStreak}</span>
+        <span className="chip chip-coins" title={`${headerCoins} ${plural(headerCoins,"монета","монеты","монет")}`}><CoinIcon/>{headerCoins}</span>
+      </div>
+    </header>
+    <div className="content">
+      <InstallHint/>
+      {tab==="today"&&<Today onStreak={updateHeader} avatar={avatar} userName={user.name}/>}
+      {tab==="stats"&&<StatsScreen/>}
+      {tab==="friends"&&<Friends/>}
+      {tab==="profile"&&<Profile user={user} avatar={avatar} coins={headerCoins} streak={headerStreak} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}
+    </div>
+    <nav>{navItems.map(([key,icon,label])=>
+      <button key={key} className={tab===key?"active":""} aria-current={tab===key?"page":undefined} onClick={()=>setTab(key)}>{icon}{label}</button>)}</nav>
+  </main>;
 }
