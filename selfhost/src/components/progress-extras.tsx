@@ -101,7 +101,7 @@ export function RepairCard({coins,onChanged}:{coins:number;onChanged:()=>void}) 
 
 type Player={id:string;name:string;username:string|null;avatarConfig?:Partial<AvatarConfig>|null;isSelf:boolean;streak:number|null;workoutMinutes:number|null};
 
-export function Leaderboard() {
+export function Leaderboard({onOpen}:{onOpen?:(userId:string)=>void}) {
   const [rows,setRows]=useState<Player[]>([]);
   useEffect(()=>{void api<Player[]>("/api/leaderboard").then(setRows).catch(()=>{});},[]);
   if(rows.length===0) return <div className="list-card"><h3>Общий рейтинг</h3>
@@ -112,7 +112,8 @@ export function Leaderboard() {
       <div className={`rank-row${player.isSelf?" me":""}`} key={player.id}>
         <span className="place">{index===0?"🥇":index===1?"🥈":index===2?"🥉":index+1}</span>
         <CharacterAvatar value={player.avatarConfig} size="small" label={`Персонаж ${player.name}`}/>
-        <div><b>{player.name}</b><small>@{player.username??"без ника"}</small></div>
+        <button type="button" className="rank-name" onClick={()=>onOpen?.(player.id)} disabled={!onOpen}>
+          <b>{player.name}</b><small>@{player.username??"без ника"}</small></button>
         <em>{player.streak===null?"скрыто":`${player.streak} ${plural(player.streak,"день","дня","дней")}`}</em>
         <i>{player.workoutMinutes===null?"тренировки скрыты":`${player.workoutMinutes} мин`}</i>
       </div>)}

@@ -6,6 +6,7 @@ import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
 import { CoinsChip, Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
 import { Onboarding } from "@/components/onboarding";
+import { FriendProfileSheet } from "@/components/friend-profile";
 import { basalRate, goalCalories, maintenance } from "@/lib/body";
 import { AvatarEditor, CharacterAvatar } from "@/components/avatar-editor";
 import type { AvatarConfig } from "@/lib/avatar";
@@ -321,22 +322,24 @@ function Today({onStreak}:{onStreak?:(days:number,coins:number)=>void}) {
 
 function Friends() {
   const [query,setQuery]=useState(""); const [results,setResults]=useState<Person[]>([]); const [people,setPeople]=useState<Person[]>([]); const [feed,setFeed]=useState<FeedEvent[]>([]); const [notice,setNotice]=useState("");
-  async function refresh(){const [friends,events]=await Promise.all([jsonFetch<Person[]>("/api/friends"),jsonFetch<FeedEvent[]>("/api/feed")]);setPeople(friends);setFeed(events);}
-  useEffect(()=>{void Promise.resolve().then(refresh);},[]);
+  const [peek,setPeek]=useState<string|null>(null);
+  const refresh=useCallback(async()=>{const [friends,events]=await Promise.all([jsonFetch<Person[]>("/api/friends"),jsonFetch<FeedEvent[]>("/api/feed")]);setPeople(friends);setFeed(events);},[]);
+  useEffect(()=>{void refresh();},[refresh]);
   useEffect(()=>{const timer=setTimeout(()=>{if(query.trim().length>=2)jsonFetch<Person[]>(`/api/users/search?q=${encodeURIComponent(query)}`).then(setResults);else setResults([]);},250);return()=>clearTimeout(timer);},[query]);
   async function request(userId:string){try{await jsonFetch("/api/friends",{method:"POST",body:JSON.stringify({userId})});setNotice("Заявка отправлена");await refresh();}catch{setNotice("Заявка уже существует");}}
   async function act(userId:string,action:"accept"|"reject"){await jsonFetch(`/api/friends/${userId}`,{method:"PATCH",body:JSON.stringify({action})});await refresh();}
   const incoming=people.filter(p=>p.status==="pending"&&!p.sentByMe); const accepted=people.filter(p=>p.status==="accepted");
   return <section className="screen slide-up"><div className="hero-row"><div><p className="eyebrow">ВМЕСТЕ ВЕСЕЛЕЕ</p><h2>Друзья</h2></div><div className="buddy-bubbles"><span>🐼</span><span>🦊</span><span>🐸</span></div></div>
-    <div className="search-card"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Найти по нику или имени"/>{notice&&<small>{notice}</small>}{results.map(person=><PersonRow key={person.id} person={person} action={person.relationship==="none"?<button onClick={()=>request(person.id)}>Добавить</button>:<span className="status">{person.relationship==="friends"?"Уже друзья":"Заявка отправлена"}</span>}/>)}</div>
-    {incoming.length>0&&<div className="list-card"><h3>Заявки</h3>{incoming.map(p=><PersonRow key={p.id} person={p} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
-    <div className="list-card"><h3>Твои друзья · {accepted.length}</h3>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
-    <Leaderboard/>
+    <div className="search-card"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Найти по нику или имени"/>{notice&&<small>{notice}</small>}{results.map(person=><PersonRow key={person.id} person={person} onOpen={()=>setPeek(person.id)} action={person.relationship==="none"?<button onClick={()=>request(person.id)}>Добавить</button>:<span className="status">{person.relationship==="friends"?"Уже друзья":"Заявка отправлена"}</span>}/>)}</div>
+    {incoming.length>0&&<div className="list-card"><h3>Заявки</h3>{incoming.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)} action={<div className="row-actions"><button onClick={()=>act(p.id,"accept")}>Принять</button><button className="ghost" onClick={()=>act(p.id,"reject")}>Нет</button></div>}/>)}</div>}
+    <div className="list-card"><h3>Твои друзья · {accepted.length}</h3>{accepted.length?accepted.map(p=><PersonRow key={p.id} person={p} onOpen={()=>setPeek(p.id)}/>):<div className="empty"><span>👋</span><p>Найди друга по уникальному нику</p></div>}</div>
+    <Leaderboard onOpen={setPeek}/>
     <div className="list-card"><h3>Активность</h3>{feed.length?feed.map(event=><div className="feed" key={event.id}><span>{event.type==="workout"?"🏋️":"🔥"}</span><p>{event.type==="workout"?<><b>{event.name}</b> добавил тренировку · {event.payload.minutes??0} мин</>:<><b>{event.name}</b> уже {event.payload.days??1} {plural(event.payload.days??1,"день","дня","дней")} подряд</>}</p><time>{new Date(event.createdAt).toLocaleDateString("ru")}</time></div>):<div className="empty"><span>✨</span><p>Здесь появятся успехи друзей</p></div>}</div>
+    {peek&&<FriendProfileSheet userId={peek} onClose={()=>setPeek(null)} onChanged={()=>void refresh()}/>}
   </section>;
 }
 
-function PersonRow({person,action}:{person:Person;action?:React.ReactNode}) {const hasShared=person.status==="accepted"&&(person.sharesWeight||person.sharesCalories||person.sharesSteps||person.sharesFood);return <div className={`person${hasShared?" with-metrics":""}`}><CharacterAvatar value={person.avatarConfig} size="small" label={`Персонаж ${person.name}`}/><div><b>{person.name}</b><small>@{person.username??"без-ника"}</small></div>{action&&<div className="person-action">{action}</div>}{hasShared&&<div className="friend-metrics">{person.sharesWeight&&<span>⚖️ <b>{person.sharedWeightKg??"—"}</b> кг</span>}{person.sharesCalories&&<span>🍽️ <b>{person.sharedCalories??"—"}</b> ккал</span>}{person.sharesSteps&&<span>👟 <b>{person.sharedSteps??"—"}</b> шагов</span>}{person.sharesFood&&<div className="friend-food"><b>Что ел сегодня</b>{person.sharedFood?.length?<p>{person.sharedFood.join(" · ")}</p>:<p>Пока ничего не записал</p>}</div>}</div>}</div>}
+function PersonRow({person,action,onOpen}:{person:Person;action?:React.ReactNode;onOpen?:()=>void}) {const hasShared=person.status==="accepted"&&(person.sharesWeight||person.sharesCalories||person.sharesSteps||person.sharesFood);return <div className={`person${hasShared?" with-metrics":""}`}><CharacterAvatar value={person.avatarConfig} size="small" label={`Персонаж ${person.name}`}/><button type="button" className="person-name" onClick={onOpen} disabled={!onOpen}><b>{person.name}</b><small>@{person.username??"без-ника"}</small></button>{action&&<div className="person-action">{action}</div>}{hasShared&&<div className="friend-metrics">{person.sharesWeight&&<span>⚖️ <b>{person.sharedWeightKg??"—"}</b> кг</span>}{person.sharesCalories&&<span>🍽️ <b>{person.sharedCalories??"—"}</b> ккал</span>}{person.sharesSteps&&<span>👟 <b>{person.sharedSteps??"—"}</b> шагов</span>}{person.sharesFood&&<div className="friend-food"><b>Что ел сегодня</b>{person.sharedFood?.length?<p>{person.sharedFood.join(" · ")}</p>:<p>Пока ничего не записал</p>}</div>}</div>}</div>}
 
 function InstallHint() {
   const [show,setShow]=useState(false);
