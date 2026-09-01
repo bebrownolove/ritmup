@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { StatsScreen } from "@/components/stats";
 import { BodyCard } from "@/components/body-card";
@@ -16,6 +16,11 @@ type Tab = "today" | "stats" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; avatarConfig?:Partial<AvatarConfig>|null; relationship?:string; status?:string; sentByMe?:boolean; sharedWeightKg?:number|null;sharedCalories?:number|null;sharedSteps?:number|null;sharedFood?:string[];sharesWeight?:boolean;sharesCalories?:boolean;sharesSteps?:boolean;sharesFood?:boolean };
 type FeedEvent = { id:number; type:string; payload:{days?:number;minutes?:number}; createdAt:string; name:string; username?:string };
 type Entry = { id:string; title:string; calories:number };
+type FoodAnalysis = {
+  title:string; calories:number; rangeMin:number; rangeMax:number;
+  confidence:"low"|"medium"|"high"; explanation:string; assumptions:string[];
+  remaining:number;
+};
 type WeightPoint = { date:string; weightKg:number };
 type Workout = { id:string; title:string; minutes:number; calories:number|null; date:string };
 type AppUser = { id:string; name:string; email:string; username?:string|null };
@@ -58,6 +63,93 @@ async function jsonFetch<T>(url:string, init?:RequestInit):Promise<T> {
   const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}});
   if(!response.ok) throw new Error((await response.json().catch(()=>({}))).error??"request_failed");
   return response.json();
+}
+
+async function resizeFoodPhoto(file:File) {
+  const url=URL.createObjectURL(file);
+  try {
+    const image=await new Promise<HTMLImageElement>((resolve,reject)=>{
+      const element=new Image();
+      element.onload=()=>resolve(element); element.onerror=()=>reject(new Error("invalid_photo")); element.src=url;
+    });
+    const longest=Math.max(image.naturalWidth,image.naturalHeight);
+    const scale=Math.min(1,1280/longest);
+    const width=Math.max(1,Math.round(image.naturalWidth*scale));
+    const height=Math.max(1,Math.round(image.naturalHeight*scale));
+    const canvas=document.createElement("canvas"); canvas.width=width; canvas.height=height;
+    const context=canvas.getContext("2d");
+    if(!context)throw new Error("invalid_photo");
+    context.drawImage(image,0,0,width,height);
+    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
+    if(!blob)throw new Error("invalid_photo");
+    return new File([blob],"food.jpg",{type:"image/jpeg"});
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number)=>Promise<boolean>;onClose:()=>void}) {
+  const [description,setDescription]=useState(""); const [photo,setPhoto]=useState<File|null>(null);
+  const [preview,setPreview]=useState(""); const [result,setResult]=useState<FoodAnalysis|null>(null);
+  const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
+  const [busy,setBusy]=useState(false); const [saving,setSaving]=useState(false); const [error,setError]=useState("");
+  const previewRef=useRef("");
+  useEffect(()=>()=>{if(previewRef.current)URL.revokeObjectURL(previewRef.current);},[]);
+  function choosePhoto(next:File|null){
+    if(previewRef.current)URL.revokeObjectURL(previewRef.current);
+    const url=next?URL.createObjectURL(next):"";previewRef.current=url;setPreview(url);setPhoto(next);
+  }
+  const confidence={low:"низкая",medium:"средняя",high:"высокая"};
+  const errors:Record<string,string>={
+    ai_not_configured:"Анализ пока не подключён на сервере.",daily_limit:"На сегодня использованы все 100 анализов.",
+    ai_busy:"Gemini сейчас перегружен — попробуй чуть позже.",analysis_timeout:"Gemini отвечает слишком долго — попробуй ещё раз.",
+    invalid_photo:"Не удалось прочитать фото. Попробуй сделать его ещё раз.",invalid_description:"Опиши порцию чуть подробнее.",
+    invalid_ai_response:"Gemini не смог уверенно разобрать блюдо. Добавь деталей в описание.",analysis_failed:"Не удалось проанализировать еду.",
+  };
+  async function analyze(event:FormEvent){
+    event.preventDefault();if(!photo||description.trim().length<10||busy)return;
+    setBusy(true);setError("");setResult(null);
+    try{
+      const prepared=await resizeFoodPhoto(photo);
+      const form=new FormData();form.set("description",description.trim());form.set("photo",prepared);
+      const response=await fetch("/api/food-analyze",{method:"POST",body:form});
+      const payload=await response.json().catch(()=>({error:"analysis_failed"})) as FoodAnalysis&{error?:string};
+      if(!response.ok)throw new Error(payload.error??"analysis_failed");
+      setResult(payload);setTitle(payload.title);setCalories(String(payload.calories));
+    }catch(reason){const code=reason instanceof Error?reason.message:"analysis_failed";setError(errors[code]??errors.analysis_failed);}
+    finally{setBusy(false);}
+  }
+  async function save(event:FormEvent){
+    event.preventDefault();const value=Number(calories);if(!title.trim()||!value||saving)return;
+    setSaving(true);setError("");
+    if(await onAdd(title.trim(),value))onClose();else setError("Не удалось добавить запись в дневник.");
+    setSaving(false);
+  }
+  if(result)return <div className="ai-estimator ai-result">
+    <div className="ai-result-head"><span>✨</span><div><b>Оценка готова</b><small>Уверенность: {confidence[result.confidence]}</small></div></div>
+    <div className="ai-range"><b>≈ {spaced(result.calories)} ккал</b><small>вероятный диапазон {spaced(result.rangeMin)}–{spaced(result.rangeMax)} ккал</small></div>
+    <p>{result.explanation}</p>
+    {result.assumptions.length>0&&<details><summary>Что Gemini предположил</summary><ul>{result.assumptions.map(item=><li key={item}>{item}</li>)}</ul></details>}
+    <form className="ai-confirm" onSubmit={save}>
+      <label>Название<input value={title} onChange={event=>setTitle(event.target.value)} maxLength={120} required/></label>
+      <label>Калории<input value={calories} onChange={event=>setCalories(event.target.value)} type="number" min="1" max="10000" required/></label>
+      <button className="btn-primary" disabled={saving}>{saving?"Добавляю…":"Добавить в дневник"}</button>
+    </form>
+    <small className="ai-disclaimer">Это приблизительная оценка, а не медицинское измерение. Проверь цифры перед добавлением. Осталось анализов: {result.remaining}.</small>
+    {error&&<p className="ai-error" role="alert">{error}</p>}
+    <button className="ai-back" type="button" onClick={()=>setResult(null)}>Изменить фото или описание</button>
+  </div>;
+  return <form className="ai-estimator" onSubmit={analyze}>
+    <div className="ai-heading"><div><span>✨</span><h4>Оценить с Gemini</h4></div><button type="button" onClick={onClose} aria-label="Закрыть">×</button></div>
+    <label className="ai-field"><b>1. Опиши порцию честно</b><textarea value={description} onChange={event=>setDescription(event.target.value)} minLength={10} maxLength={800} required rows={4} placeholder="Например: около 250 г домашнего плова с курицей, масла примерно столовая ложка. На фото вся порция."/><small>Укажи примерный вес или объём, состав, масло и соусы. Для упаковки — бренд и размер.</small></label>
+    <label className={`ai-photo${preview?" has-photo":""}`}>
+      <input type="file" accept="image/*" capture="environment" required onChange={event=>choosePhoto(event.target.files?.[0]??null)}/>
+      {/* blob: — одноразовый локальный предпросмотр, оптимизация Next Image здесь неприменима. */}
+      {preview?<img src={preview} alt="Выбранная еда"/>:<span>📷</span> /* eslint-disable-line @next/next/no-img-element */}
+      <b>{preview?"Сменить фотографию":"2. Сделать или выбрать фото"}</b>
+    </label>
+    <p className="ai-privacy">Фото отправится Google Gemini для анализа и не сохранится в Ритме. На бесплатном тарифе Google может использовать данные для улучшения своих продуктов.</p>
+    {error&&<p className="ai-error" role="alert">{error}</p>}
+    <button className="btn-primary" disabled={busy||!photo||description.trim().length<10}>{busy?"Gemini считает порцию…":"Оценить калории"}</button>
+  </form>;
 }
 
 /** На iPhone браузер не даёт запустить установку кодом, поэтому показываем
@@ -251,6 +343,7 @@ type WeekCell = { date:string; label:string; state:"ok"|"over"|"today"|"future"|
 function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=>void;avatar?:Partial<AvatarConfig>|null;userName:string}) {
   const date=todayKey();
   const [adding,setAdding]=useState(false);
+  const [aiAdding,setAiAdding]=useState(false);
   const [week,setWeek]=useState<WeekCell[]>([]);
   const firstName=userName.split(" ")[0]||userName;
   const [section,setSection]=useState<"food"|"movement"|"weight">("food");
@@ -310,17 +403,21 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
     return()=>{window.removeEventListener("ritm-healthkit-ready",detect);window.removeEventListener("ritm-health-data",receive);};
   },[date]);
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
+  async function createEntry(nextTitle:string,value:number){
+    if(!nextTitle.trim()||!value||busy)return false;
+    setBusy(true);
+    try{
+      const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",body:JSON.stringify({date,title:nextTitle.trim(),calories:value})});
+      const next=[...entries,saved];
+      setEntries(next);
+      refreshDay();
+      setBusy(false);return true;
+    }catch{setBusy(false);return false;}
+  }
   async function add(event:FormEvent){
     event.preventDefault();
     const value=Number(calories); if(!title.trim()||!value||busy)return;
-    setBusy(true);
-    try{
-      const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",body:JSON.stringify({date,title:title.trim(),calories:value})});
-      const next=[...entries,saved];
-      setEntries(next); setTitle(""); setCalories("");
-      refreshDay();
-    }catch{}
-    setBusy(false);
+    if(await createEntry(title,value)){setTitle("");setCalories("");setAdding(false);}
   }
   async function remove(id:string){
     const next=entries.filter(item=>item.id!==id);
@@ -372,13 +469,18 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
               <em>{item.calories}</em>
               <button className="remove" onClick={()=>void remove(item.id)} aria-label="Удалить">×</button>
             </div>)}
-        {adding
+        {aiAdding
+          ? <FoodAiEstimator onAdd={createEntry} onClose={()=>setAiAdding(false)}/>
+          : adding
           ? <form className="quick-add" onSubmit={add} style={{marginTop:12}}>
               <input value={title} onChange={e=>setTitle(e.target.value)} autoFocus placeholder="Что съел? Например, клубника"/>
               <input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/>
               <button className="btn-primary" disabled={busy}>{busy?"…":"Добавить"}</button>
             </form>
-          : <button className="btn-primary" style={{marginTop:12}} onClick={()=>setAdding(true)}>Добавить еду</button>}
+          : <div className="food-add-actions">
+              <button className="btn-primary" onClick={()=>setAiAdding(true)}><span aria-hidden>✨</span> Оценить по фото</button>
+              <button className="btn-secondary" onClick={()=>setAdding(true)}>Ввести вручную</button>
+            </div>}
       </div>
       <Milestone streak={streak}/>
       <RepairCard coins={coins} onChanged={refreshDay}/>
