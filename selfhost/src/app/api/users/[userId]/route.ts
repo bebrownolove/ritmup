@@ -70,10 +70,11 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
               count(*) filter (where calories_eaten>0 and calories_eaten<=calorie_goal)::int as hits,
               count(*) filter (where calories_eaten>0)::int as tracked
          from daily_logs where user_id=$1 and log_date > $2::date - 30`, [person.id, person.today]),
-    shares.calories || shares.steps
-      ? db.query<{ calories: number; goal: number; steps: number | null }>(
+    shares.calories || shares.steps || shares.workouts || shares.weight
+      ? db.query<{ calories: number; goal: number; steps: number | null; activeCalories:number; weightKg:number|null }>(
           `select coalesce(l.calories_eaten,0)::int as calories,
-                  coalesce(l.calorie_goal,p.calorie_goal,2000)::int as goal, l.steps
+                  coalesce(l.calorie_goal,p.calorie_goal,2000)::int as goal, l.steps,
+                  coalesce(l.active_calories,0)::int as "activeCalories", l.weight_kg::float8 as "weightKg"
              from profiles p left join daily_logs l on l.user_id=p.user_id and l.log_date=$2::date
             where p.user_id=$1`, [person.id, person.today])
       : null,
@@ -98,16 +99,26 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
           `select title, calories from food_entries
             where user_id=$1 and log_date=$2::date order by created_at`, [person.id, person.today])
       : null,
-    // Вкладка «История»: последние две недели с нормой каждого дня, чтобы
-    // на экране было видно, где человек её превысил.
-    shares.calories
-      ? db.query<{ date: string; calories: number; goal: number; steps: number | null }>(
+    // В истории собираем тот же дневник по дням, что человек видит у себя.
+    shares.calories || shares.steps || shares.food || shares.workouts || shares.weight
+      ? db.query<{ date:string; calories:number; goal:number; steps:number|null; activeCalories:number; weightKg:number|null; food:{title:string;calories:number}[]; workouts:{title:string;minutes:number;calories:number|null}[] }>(
           `select to_char(d.day,'YYYY-MM-DD') as date,
                   coalesce(l.calories_eaten,0)::int as calories,
-                  coalesce(l.calorie_goal,p.calorie_goal,2000)::int as goal, l.steps
+                  coalesce(l.calorie_goal,p.calorie_goal,2000)::int as goal, l.steps,
+                  coalesce(l.active_calories,0)::int as "activeCalories", l.weight_kg::float8 as "weightKg",
+                  coalesce(food.items,'[]'::json) as food,
+                  coalesce(work.items,'[]'::json) as workouts
              from generate_series($2::date - 13, $2::date, interval '1 day') as d(day)
              cross join profiles p
              left join daily_logs l on l.user_id=p.user_id and l.log_date=d.day
+             left join lateral (
+               select json_agg(json_build_object('title',e.title,'calories',e.calories) order by e.created_at) as items
+                 from food_entries e where e.user_id=$1 and e.log_date=d.day
+             ) food on true
+             left join lateral (
+               select json_agg(json_build_object('title',x.title,'minutes',x.minutes,'calories',x.calories) order by x.created_at) as items
+                 from workouts x where x.user_id=$1 and x.log_date=d.day
+             ) work on true
             where p.user_id=$1 order by d.day desc`, [person.id, person.today])
       : null,
   ] as const);
@@ -140,11 +151,22 @@ export async function GET(request: Request, context: { params: Promise<{ userId:
       calories: shares.calories && day ? day.rows[0]?.calories ?? 0 : null,
       goal: shares.calories && day ? day.rows[0]?.goal ?? null : null,
       steps: shares.steps && day ? day.rows[0]?.steps ?? null : null,
+      activeCalories: shares.workouts && day ? day.rows[0]?.activeCalories ?? 0 : null,
+      weightKg: shares.weight && day ? day.rows[0]?.weightKg ?? null : null,
       // Калории у каждого блюда показываем, только если человек открыл и калории тоже.
       food: food ? food.rows.map(item => ({ title: item.title, calories: shares.calories ? item.calories : null })) : null,
     },
     workoutMinutes: workoutMinutes ? workoutMinutes.rows[0].total : null,
     workouts: workouts ? workouts.rows : null,
-    history: history ? history.rows : null,
+    history: history ? history.rows.map(item=>({
+      date:item.date,
+      calories:shares.calories?item.calories:null,
+      goal:shares.calories?item.goal:null,
+      steps:shares.steps?item.steps:null,
+      activeCalories:shares.workouts?item.activeCalories:null,
+      weightKg:shares.weight?item.weightKg:null,
+      food:shares.food?item.food.map(entry=>({title:entry.title,calories:shares.calories?entry.calories:null})):null,
+      workouts:shares.workouts?item.workouts:null,
+    })) : null,
   });
 }

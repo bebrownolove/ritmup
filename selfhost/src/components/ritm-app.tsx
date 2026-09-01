@@ -679,8 +679,9 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
   </div>;
 }
 
-function Profile({user,avatar,coins,streak,onOpenMaker,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;coins:number;streak:number;onOpenMaker:()=>void;onOpenOnboarding:()=>void}) {
+function Profile({user,avatar,streak,onOpenMaker,onOpenOnboarding}:{user:{name:string;email:string;username?:string|null};avatar?:Partial<AvatarConfig>|null;streak:number;onOpenMaker:()=>void;onOpenOnboarding:()=>void}) {
   const [settings,setSettings]=useState({isDiscoverable:true,shareStreak:true,shareGoalHits:true,shareWorkouts:true,shareWeight:false,shareCalories:false,shareSteps:false,shareFood:false}); const [saved,setSaved]=useState(false);
+  const [privacyError,setPrivacyError]=useState(false);
   const [weightChange,setWeightChange]=useState<number|null>(null);
   const [joined,setJoined]=useState("");
   const [totals,setTotals]=useState({loggedDays:0,goalDays:0,workoutMinutes:0});
@@ -705,7 +706,16 @@ function Profile({user,avatar,coins,streak,onOpenMaker,onOpenOnboarding}:{user:{
     {key:"sport",icon:"🏃",tone:"cool",title:"100 минут тренировок за месяц",earned:totals.workoutMinutes>=100},
     {key:"log",icon:"📖",tone:"warm",title:"20 дней с записями",earned:totals.loggedDays>=20},
   ];
-  async function toggle(key:keyof typeof settings){const next={...settings,[key]:!settings[key]};setSettings(next);await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify(next)});setSaved(true);setTimeout(()=>setSaved(false),1200);}
+  async function toggle(key:keyof typeof settings){
+    const value=!settings[key];
+    setPrivacyError(false);setSettings(current=>({...current,[key]:value}));
+    try{
+      // Отправляем только изменённое поле: быстрые нажатия больше не могут
+      // перезаписать соседние переключатели устаревшим состоянием.
+      await jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({[key]:value})});
+      setSaved(true);setTimeout(()=>setSaved(false),1200);
+    }catch{setSettings(current=>({...current,[key]:!value}));setPrivacyError(true);}
+  }
   return <section className="screen">
     <div className="hero-dark profile-hero">
       <CharacterAvatar value={avatar} size="large" label="Твой персонаж"/>
@@ -716,9 +726,8 @@ function Profile({user,avatar,coins,streak,onOpenMaker,onOpenOnboarding}:{user:{
       <button className="btn-edit" onClick={onOpenMaker}>Изменить персонажа</button>
     </div>
 
-    <div className="tiles three">
+    <div className="tiles">
       <div className="tile"><b>{streak}</b><small>{plural(streak,"день","дня","дней")} подряд</small></div>
-      <div className="tile"><b>{coins}</b><small>{plural(coins,"монета","монеты","монет")}</small></div>
       <div className="tile"><b>{weightChange===null?"—":`${weightChange>0?"+":"−"}${Math.abs(weightChange).toFixed(1).replace(".",",")}`}</b><small>кг за месяц</small></div>
     </div>
 
@@ -733,7 +742,7 @@ function Profile({user,avatar,coins,streak,onOpenMaker,onOpenOnboarding}:{user:{
       <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Цель и дневная норма</b><small>Снизить, держать или набрать вес</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти полный расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
-      <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{saved?"Сохранено ✓":"Что видят другие люди"}</small></div><i>›</i></summary><div className="profile-group-content settings"><h4 className="privacy-section-title">Для друзей</h4><Toggle label="Показывать мой вес" value={settings.shareWeight} onClick={()=>toggle("shareWeight")}/><Toggle label="Показывать съеденные калории за день" value={settings.shareCalories} onClick={()=>toggle("shareCalories")}/><Toggle label="Показывать, что я ем" value={settings.shareFood} onClick={()=>toggle("shareFood")}/><Toggle label="Показывать шаги за день" value={settings.shareSteps} onClick={()=>toggle("shareSteps")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><h4 className="privacy-section-title public">Для всех в общем рейтинге</h4><Toggle label="Показывать серию дней" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><p className="privacy-note">Вес, калории, еду и шаги видят только подтверждённые друзья — и только те данные, которые ты включишь.</p></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{privacyError?"Не сохранилось":saved?"Сохранено ✓":"Что видят другие люди"}</small></div><i>›</i></summary><div className="profile-group-content settings"><h4 className="privacy-section-title">Для друзей</h4><Toggle label="Показывать мой вес" value={settings.shareWeight} onClick={()=>toggle("shareWeight")}/><Toggle label="Показывать съеденные калории за день" value={settings.shareCalories} onClick={()=>toggle("shareCalories")}/><Toggle label="Показывать, что я ем" value={settings.shareFood} onClick={()=>toggle("shareFood")}/><Toggle label="Показывать шаги за день" value={settings.shareSteps} onClick={()=>toggle("shareSteps")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><h4 className="privacy-section-title public">Для всех в общем рейтинге</h4><Toggle label="Показывать серию дней" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><p className="privacy-note">Вес, калории, еду и шаги видят только подтверждённые друзья — и только те данные, которые ты включишь.</p></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
     </div>
     <button className="danger" onClick={()=>authClient.signOut()}>Выйти из аккаунта</button>
@@ -798,7 +807,7 @@ export function RitmApp() {
     onSaved={value=>{setAvatar(value);setMaker(false);}} onCoins={setHeaderCoins} onClose={()=>setMaker(false)}/>;
   const navItems:[Tab,React.ReactNode,string][]=[
     ["today",<HomeIcon key="h"/>,"Сегодня"],
-    ["stats",<BarsIcon key="b"/>,"Статистика"],
+    ["stats",<BarsIcon key="b"/>,"История"],
     ["friends",<FriendsIcon key="f"/>,"Друзья"],
     ["profile",<PersonIcon key="p"/>,"Профиль"],
   ];
@@ -806,7 +815,7 @@ export function RitmApp() {
     <header>
       {tab==="today"
         ? <div className="brand"><span className="brand-mark" aria-hidden>Р</span>Ритм</div>
-        : <b className="screen-title">{tab==="stats"?"Статистика":tab==="friends"?"Друзья":"Профиль"}</b>}
+        : <b className="screen-title">{tab==="stats"?"История":tab==="friends"?"Друзья":"Профиль"}</b>}
       <div className="header-status">
         <span className="chip chip-streak" title={`${headerStreak} ${plural(headerStreak,"день","дня","дней")} подряд`}><FlameIcon/>{headerStreak}</span>
         <span className="chip chip-coins" title={`${headerCoins} ${plural(headerCoins,"монета","монеты","монет")}`}><CoinIcon/>{headerCoins}</span>
@@ -817,7 +826,7 @@ export function RitmApp() {
       {tab==="today"&&<Today onStreak={updateHeader} avatar={avatar} userName={user.name}/>}
       {tab==="stats"&&<StatsScreen/>}
       {tab==="friends"&&<Friends/>}
-      {tab==="profile"&&<Profile user={user} avatar={avatar} coins={headerCoins} streak={headerStreak} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}
+      {tab==="profile"&&<Profile user={user} avatar={avatar} streak={headerStreak} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}
     </div>
     <nav>{navItems.map(([key,icon,label])=>
       <button key={key} className={tab===key?"active":""} aria-current={tab===key?"page":undefined} onClick={()=>setTab(key)}>{icon}{label}</button>)}</nav>

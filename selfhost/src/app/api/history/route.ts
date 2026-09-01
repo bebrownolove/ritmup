@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 
-/** Последние дни: еда, норма, вес, шаги и минуты тренировок одним запросом. */
+/** Последние дни вместе с конкретными блюдами и тренировками для дневника. */
 export async function GET(request: Request) {
   const user = await requireUser(request);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -14,7 +14,9 @@ export async function GET(request: Request) {
             coalesce(l.calorie_goal,(select calorie_goal from profiles where user_id=$1),2000) as "calorieGoal",
             l.weight_kg::float8 as "weightKg",
             l.steps, coalesce(l.active_calories,0) as "activeCalories",
-            coalesce(w.minutes,0) as "workoutMinutes"
+            coalesce(w.minutes,0) as "workoutMinutes",
+            coalesce(food.items,'[]'::json) as food,
+            coalesce(w.items,'[]'::json) as workouts
        from generate_series(
               -- Не показываем дни до регистрации: иначе новый аккаунт видит месяц пустых столбиков.
               greatest(
@@ -23,8 +25,15 @@ export async function GET(request: Request) {
               (now() at time zone (select tz from zone))::date,
               interval '1 day') as d(day)
        left join daily_logs l on l.user_id=$1 and l.log_date=d.day
-       left join (select log_date, sum(minutes)::int as minutes from workouts
-                   where user_id=$1 group by log_date) w on w.log_date=d.day
+       left join lateral (
+         select json_agg(json_build_object('title',e.title,'calories',e.calories) order by e.created_at) as items
+           from food_entries e where e.user_id=$1 and e.log_date=d.day
+       ) food on true
+       left join lateral (
+         select sum(x.minutes)::int as minutes,
+                json_agg(json_build_object('title',x.title,'minutes',x.minutes,'calories',x.calories) order by x.created_at) as items
+           from workouts x where x.user_id=$1 and x.log_date=d.day
+       ) w on true
       order by d.day`, [user.id, days]);
   return Response.json(result.rows);
 }

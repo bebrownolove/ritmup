@@ -7,8 +7,13 @@ import { normalizeAvatar, type AvatarConfig } from "@/lib/avatar";
 import { BG } from "@/lib/avatar-render";
 
 type Relationship = "self" | "friends" | "incoming" | "outgoing" | "none";
-type Tab = "today" | "history" | "sport";
-type HistoryDay = { date:string; calories:number; goal:number; steps:number|null };
+type Tab = "food" | "movement" | "weight" | "history";
+type HistoryDay = {
+  date:string; calories:number|null; goal:number|null; steps:number|null;
+  activeCalories:number|null; weightKg:number|null;
+  food:{title:string;calories:number|null}[]|null;
+  workouts:{title:string;minutes:number;calories:number|null}[]|null;
+};
 
 export type FriendProfile = {
   id:string; name:string; username:string|null; bio:string;
@@ -18,7 +23,7 @@ export type FriendProfile = {
   daysLogged:number|null;
   goalHits:{ hits:number; tracked:number }|null;
   weight:{ current:number; change:number|null; points:{date:string;weightKg:number}[] }|null;
-  today:{ calories:number|null; goal:number|null; steps:number|null; food:{ title:string; calories:number|null }[]|null };
+  today:{ calories:number|null; goal:number|null; steps:number|null; activeCalories:number|null; weightKg:number|null; food:{ title:string; calories:number|null }[]|null };
   workoutMinutes:number|null;
   workouts:{ date:string; title:string; minutes:number }[]|null;
   history:HistoryDay[]|null;
@@ -54,7 +59,7 @@ function Locked({label}:{label:string}) {
 export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onClose:()=>void;onChanged?:()=>void}) {
   const [profile,setProfile]=useState<FriendProfile|null>(null);
   const [failed,setFailed]=useState(false);
-  const [tab,setTab]=useState<Tab>("today");
+  const [tab,setTab]=useState<Tab>("food");
   const [busy,setBusy]=useState(false);
   const [note,setNote]=useState("");
 
@@ -85,11 +90,6 @@ export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onC
   const goalShare=profile?.goalHits&&profile.goalHits.tracked>0
     ? Math.round((profile.goalHits.hits/profile.goalHits.tracked)*100) : null;
   const isFriend=profile?.relationship==="friends"||profile?.relationship==="self";
-
-  const tracked=profile?.history?.filter(day=>day.calories>0)??[];
-  const average=tracked.length?Math.round(tracked.reduce((sum,day)=>sum+day.calories,0)/tracked.length):0;
-  const week=profile?.history?.slice(0,7).reverse()??[];
-  const peak=Math.max(...week.map(day=>Math.max(day.calories,1)),1);
 
   return <div className="peek-backdrop" role="dialog" aria-modal="true" aria-label="Профиль" onClick={onClose}>
     <div className="peek-sheet" onClick={event=>event.stopPropagation()}>
@@ -128,12 +128,12 @@ export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onC
           </div>
 
           <div className="segmented" role="tablist">
-            {([["today","Сегодня"],["history","История"],["sport","Спорт"]] as [Tab,string][]).map(([key,label])=>
+            {([["food","Питание"],["movement","Движение"],["weight","Вес"],["history","История"]] as [Tab,string][]).map(([key,label])=>
               <button key={key} role="tab" aria-selected={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}</button>)}
           </div>
 
           <div className="peek-scroll">
-            {tab==="today"&&<>
+            {tab==="food"&&<>
               {shares!.calories
                 ? <div className="peek-metric">
                     <CutleryIcon/>
@@ -148,65 +148,48 @@ export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onC
                   </div>
                 : <Locked label={isFriend?"Калории скрыты":"Калории видят только друзья"}/>}
 
-              {shares!.steps&&<div className="peek-metric">
-                <ShoeIcon/>
-                <div className="peek-metric-head" style={{marginBottom:0}}>
-                  <b>{profile.today.steps!==null?spaced(profile.today.steps):"—"}</b><small>шагов</small>
-                </div>
-              </div>}
-
-              {shares!.food&&<div className="peek-food">
+              {shares!.food?<div className="peek-food">
                 <h3>Что ел сегодня</h3>
                 {profile.today.food?.length
                   ? <div className="peek-food-list">{profile.today.food.map((item,index)=>
-                      <span key={`${item.title}-${index}`}><b>{item.title}</b>{item.calories!==null&&<small>{item.calories}</small>}</span>)}</div>
+                      <span key={`${item.title}-${index}`}><b>{item.title}</b>{item.calories!==null&&<small>{item.calories} ккал</small>}</span>)}</div>
                   : <p className="muted small">Пока ничего не записал</p>}
-              </div>}
+              </div>:<Locked label={isFriend?"Список еды скрыт":"Еду видят только друзья"}/>}
             </>}
 
-            {tab==="history"&&(shares!.calories
-              ? <>
-                <div className="hero-dark" style={{borderRadius:"var(--r-card)",padding:"16px 18px"}}>
-                  <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-                    <div>
-                      <p className="eyebrow" style={{fontSize:11}}>СРЕДНЕЕ ЗА НЕДЕЛЮ</p>
-                      <b style={{fontSize:24,fontWeight:900,letterSpacing:"-0.03em"}}>{average?`${spaced(average)} ккал`:"нет данных"}</b>
-                    </div>
-                    <small style={{color:"var(--dark-body)",fontSize:12,fontWeight:800}}>норма {spaced(profile.today.goal??0)}</small>
-                  </div>
-                  <div className="bars-dark" style={{height:96}}>
-                    {week.map(day=><div key={day.date}>
-                      <i className={day.calories===0?"none":day.calories>day.goal?"over":""}
-                         style={{height:`${Math.max(day.calories/peak*100,6)}%`}}/>
-                      <small>{new Date(`${day.date}T00:00`).toLocaleDateString("ru",{weekday:"short"})}</small>
-                    </div>)}
-                  </div>
-                </div>
-                <div className="day-list">
-                  {profile.history?.map(day=>{
-                    const over=day.calories>day.goal, none=day.calories===0;
-                    return <div className="day-item" key={day.date}>
-                      <i className={none?"none":over?"over":""}/>
-                      <b>{dayLabel(day.date)}
-                        <small className={over?"over":""}>
-                          {none?"записей нет":over?`превысил норму на ${spaced(day.calories-day.goal)}`
-                            :`в норме${day.steps?` · ${spaced(day.steps)} ${plural(day.steps,"шаг","шага","шагов")}`:""}`}
-                        </small></b>
-                      <em className={none?"none":over?"over":""}>{none?"—":spaced(day.calories)}</em>
-                    </div>;
-                  })}
-                </div>
-              </>
-              : <Locked label={isFriend?"Калории скрыты":"История видна только друзьям"}/>)}
+            {tab==="movement"&&<>
+              {shares!.steps?<div className="peek-metric">
+                <ShoeIcon/><div className="peek-metric-head" style={{marginBottom:0}}><b>{profile.today.steps!==null?spaced(profile.today.steps):"—"}</b><small>шагов сегодня</small></div>
+              </div>:<Locked label={isFriend?"Шаги скрыты":"Шаги видят только друзья"}/>}
+              {shares!.workouts?(profile.workouts?.length
+                ? <div className="day-list">{profile.workouts.map((item,index)=><div className="day-item" key={`${item.date}-${index}`}><i/><b>{item.title}<small>{dayLabel(item.date)}</small></b><em>{item.minutes} мин</em></div>)}</div>
+                : <div className="peek-empty"><DumbbellIcon size={34}/><p>Пока нет записанных тренировок</p></div>)
+                :<Locked label="Тренировки скрыты"/>}
+            </>}
 
-            {tab==="sport"&&(shares!.workouts
-              ? (profile.workouts?.length
-                  ? <div className="day-list">{profile.workouts.map((item,index)=>
-                      <div className="day-item" key={`${item.date}-${index}`}>
-                        <i/><b>{item.title}<small>{dayLabel(item.date)}</small></b><em>{item.minutes} мин</em>
-                      </div>)}</div>
-                  : <div className="peek-empty"><DumbbellIcon size={34}/><p>Пока нет записанных тренировок</p></div>)
-              : <Locked label="Тренировки скрыты"/>)}
+            {tab==="weight"&&(shares!.weight
+              ? <>
+                <div className="peek-metric"><span className="peek-emoji" aria-hidden>⚖️</span><div className="peek-metric-head" style={{marginBottom:0}}><b>{profile.weight?`${profile.weight.current.toFixed(1).replace(".",",")} кг`:"—"}</b><small>{profile.weight?.change==null?"последняя запись":`${profile.weight.change>0?"+":"−"}${Math.abs(profile.weight.change).toFixed(1).replace(".",",")} кг за месяц`}</small></div></div>
+                {profile.weight?.points.length?<div className="day-list">{[...profile.weight.points].reverse().slice(0,10).map(point=><div className="day-item" key={point.date}><i/><b>{dayLabel(point.date)}</b><em>{point.weightKg.toFixed(1).replace(".",",")} кг</em></div>)}</div>:null}
+              </>
+              : <Locked label={isFriend?"Вес скрыт":"Вес видят только друзья"}/>) }
+
+            {tab==="history"&&(profile.history
+              ? <div className="history-days friend-history">{profile.history.map((day,index)=>{
+                  const food=day.food??[], workouts=day.workouts??[];
+                  const hasMovement=workouts.length>0||(day.steps??0)>0||(day.activeCalories??0)>0;
+                  const hasData=food.length>0||hasMovement||day.weightKg!==null||(day.calories??0)>0;
+                  const over=day.calories!==null&&day.goal!==null&&day.calories>day.goal;
+                  return <details className="history-day" key={day.date} open={index===0&&hasData}>
+                    <summary><span><b>{dayLabel(day.date)}</b><small>{hasData&&day.calories!==null?`${spaced(day.calories)} ккал`:hasData?"Есть записи":"Записей нет"}</small></span><em className={over?"over":""}>{hasData?"Подробнее":"—"}</em><i>›</i></summary>
+                    <div className="history-day-body">
+                      {(shares!.calories||shares!.food)&&<section><h4>🍽️ Питание</h4>{food.length?<div className="history-rows">{food.map((item,itemIndex)=><p key={`${item.title}-${itemIndex}`}><span>{item.title}</span>{item.calories!==null&&<b>{item.calories} ккал</b>}</p>)}</div>:day.calories!==null?<div className="history-rows"><p><span>Всего за день</span><b>{spaced(day.calories)} ккал</b></p></div>:<small>Еда не записана</small>}</section>}
+                      {(shares!.steps||shares!.workouts)&&<section><h4>🏃 Движение</h4>{hasMovement?<div className="history-rows">{day.steps!==null&&<p><span>Шаги</span><b>{spaced(day.steps)}</b></p>}{day.activeCalories!==null&&day.activeCalories>0&&<p><span>Активная энергия</span><b>{spaced(day.activeCalories)} ккал</b></p>}{workouts.map((item,itemIndex)=><p key={`${item.title}-${itemIndex}`}><span>{item.title}</span><b>{item.minutes} мин</b></p>)}</div>:<small>Движение не записано</small>}</section>}
+                      {shares!.weight&&<section><h4>⚖️ Вес</h4>{day.weightKg!==null?<b className="history-weight">{day.weightKg.toFixed(1).replace(".",",")} кг</b>:<small>Вес не записан</small>}</section>}
+                    </div>
+                  </details>;
+                })}</div>
+              : <Locked label={isFriend?"История скрыта":"История видна только друзьям"}/>)}
           </div>
 
           {profile.relationship==="none"&&<button className="btn-primary" disabled={busy}
