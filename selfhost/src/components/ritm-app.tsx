@@ -419,6 +419,11 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
     const value=Number(calories); if(!title.trim()||!value||busy)return;
     if(await createEntry(title,value)){setTitle("");setCalories("");setAdding(false);}
   }
+  function cancelAdding(){
+    setTitle("");
+    setCalories("");
+    setAdding(false);
+  }
   async function remove(id:string){
     const next=entries.filter(item=>item.id!==id);
     setEntries(next);
@@ -476,6 +481,7 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
               <input value={title} onChange={e=>setTitle(e.target.value)} autoFocus placeholder="Что съел? Например, клубника"/>
               <input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/>
               <button className="btn-primary" disabled={busy}>{busy?"…":"Добавить"}</button>
+              <button type="button" className="quick-cancel" disabled={busy} onClick={cancelAdding}>Отмена</button>
             </form>
           : <div className="food-add-actions">
               <button className="btn-primary" onClick={()=>setAiAdding(true)}><span aria-hidden>✨</span> Оценить по фото</button>
