@@ -13,6 +13,9 @@ const analysisSchema = z.object({
   calories: z.number().int().min(1).max(10_000),
   rangeMin: z.number().int().min(1).max(10_000),
   rangeMax: z.number().int().min(1).max(10_000),
+  proteinG: z.number().min(0).max(2000),
+  fatG: z.number().min(0).max(2000),
+  carbsG: z.number().min(0).max(2000),
   confidence: z.enum(["low", "medium", "high"]),
   explanation: z.string().trim().min(1).max(500),
   assumptions: z.array(z.string().trim().min(1).max(180)).max(6),
@@ -32,6 +35,9 @@ const responseSchema = {
     calories: { type: "integer", description: "Наиболее вероятная калорийность всей порции" },
     rangeMin: { type: "integer", description: "Реалистичная нижняя граница калорийности" },
     rangeMax: { type: "integer", description: "Реалистичная верхняя граница калорийности" },
+    proteinG: { type: "number", description: "Белки всей порции в граммах" },
+    fatG: { type: "number", description: "Жиры всей порции в граммах" },
+    carbsG: { type: "number", description: "Углеводы всей порции в граммах" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
     explanation: { type: "string", description: "Короткое объяснение расчёта на русском" },
     assumptions: {
@@ -40,7 +46,7 @@ const responseSchema = {
       description: "Главные допущения о весе, составе, масле и способе приготовления",
     },
   },
-  required: ["title", "calories", "rangeMin", "rangeMax", "confidence", "explanation", "assumptions"],
+  required: ["title", "calories", "rangeMin", "rangeMax", "proteinG", "fatG", "carbsG", "confidence", "explanation", "assumptions"],
 };
 
 function prompt(description: string) {
@@ -52,6 +58,8 @@ ${description}
 ---
 
 Оцени ВСЮ показанную и описанную порцию, а не 100 граммов. Фото и текст используй вместе. Текст пользователя считай более надёжным для веса, объёма, бренда, ингредиентов и способа приготовления; фото — для проверки состава и размера порции. Для брендов и ресторанных блюд используй только известные тебе данные и честно снижай confidence, если точных данных нет.
+
+Кроме калорий оцени белки, жиры и углеводы всей порции в граммах. Держи их согласованными с калорийностью: белок и углеводы примерно по 4 ккал на грамм, жир — 9. Сумма 4*белки + 9*жиры + 4*углеводы должна отличаться от calories не больше чем на 15%.
 
 Не изображай медицинскую точность. Учитывай невидимое масло, соусы и сахар. Если вес или состав неясны, дай широкий честный диапазон и confidence=low. calories должен находиться внутри rangeMin..rangeMax. Название, объяснение и допущения напиши по-русски. Не давай советов о похудении и не оценивай человека на фотографии.`;
 }
@@ -105,10 +113,15 @@ export async function POST(request: Request) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
 
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  /**
+   * Обдумывание не улучшает оценку порции, но заметно задерживает ответ,
+   * поэтому по умолчанию выключаем его. Не всякая модель принимает такую
+   * настройку — если сервер ответит 400 про thinking, повторим без неё.
+   */
+  const askGemini = (withThinking: boolean) =>
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY as string },
       body: JSON.stringify({
         contents: [{ parts: [
           { inline_data: { mime_type: photo.type, data: image } },
@@ -118,11 +131,20 @@ export async function POST(request: Request) {
           temperature: 0.2,
           responseMimeType: "application/json",
           responseJsonSchema: responseSchema,
+          maxOutputTokens: 900,
+          ...(withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
         },
       }),
       signal: controller.signal,
     });
-    const payload = await response.json().catch(() => null) as GeminiResponse | null;
+
+  try {
+    let response = await askGemini(false);
+    let payload = await response.json().catch(() => null) as GeminiResponse | null;
+    if (response.status === 400 && /thinking/i.test(payload?.error?.message ?? "")) {
+      response = await askGemini(true);
+      payload = await response.json().catch(() => null) as GeminiResponse | null;
+    }
     if (!response.ok) {
       console.error("Gemini food analysis failed", response.status, payload?.error?.message ?? "unknown_error");
       return Response.json({ error: response.status === 429 ? "ai_busy" : "analysis_failed", remaining: quota.remaining }, { status: response.status === 429 ? 429 : 502 });
@@ -136,7 +158,12 @@ export async function POST(request: Request) {
     const result = parsed.data;
     const rangeMin = Math.min(result.rangeMin, result.calories, result.rangeMax);
     const rangeMax = Math.max(result.rangeMin, result.calories, result.rangeMax);
-    return Response.json({ ...result, rangeMin, rangeMax, remaining: quota.remaining });
+    const round = (value: number) => Math.round(value * 10) / 10;
+    return Response.json({
+      ...result, rangeMin, rangeMax,
+      proteinG: round(result.proteinG), fatG: round(result.fatG), carbsG: round(result.carbsG),
+      remaining: quota.remaining,
+    });
   } catch (error) {
     console.error("Gemini food analysis exception", error instanceof Error ? error.message : "unknown_error");
     return Response.json({ error: error instanceof Error && error.name === "AbortError" ? "analysis_timeout" : "analysis_failed", remaining: quota.remaining }, { status: 502 });

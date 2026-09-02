@@ -15,9 +15,10 @@ import type { AvatarConfig } from "@/lib/avatar";
 type Tab = "today" | "stats" | "friends" | "profile";
 type Person = { id:string; name:string; username?:string|null; image?:string|null; avatarConfig?:Partial<AvatarConfig>|null; relationship?:string; status?:string; sentByMe?:boolean; sharedWeightKg?:number|null;sharedCalories?:number|null;sharedSteps?:number|null;sharedFood?:string[];sharesWeight?:boolean;sharesCalories?:boolean;sharesSteps?:boolean;sharesFood?:boolean };
 type FeedEvent = { id:number; type:string; payload:{days?:number;minutes?:number}; createdAt:string; name:string; username?:string };
-type Entry = { id:string; title:string; calories:number };
+type Entry = { id:string; title:string; calories:number; proteinG?:number|null; fatG?:number|null; carbsG?:number|null };
 type FoodAnalysis = {
   title:string; calories:number; rangeMin:number; rangeMax:number;
+  proteinG:number; fatG:number; carbsG:number;
   confidence:"low"|"medium"|"high"; explanation:string; assumptions:string[];
   remaining:number;
 };
@@ -73,23 +74,32 @@ async function resizeFoodPhoto(file:File) {
       element.onload=()=>resolve(element); element.onerror=()=>reject(new Error("invalid_photo")); element.src=url;
     });
     const longest=Math.max(image.naturalWidth,image.naturalHeight);
-    const scale=Math.min(1,1280/longest);
+    const scale=Math.min(1,1024/longest);
     const width=Math.max(1,Math.round(image.naturalWidth*scale));
     const height=Math.max(1,Math.round(image.naturalHeight*scale));
     const canvas=document.createElement("canvas"); canvas.width=width; canvas.height=height;
     const context=canvas.getContext("2d");
     if(!context)throw new Error("invalid_photo");
     context.drawImage(image,0,0,width,height);
-    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
+    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,"image/jpeg",.72));
     if(!blob)throw new Error("invalid_photo");
     return new File([blob],"food.jpg",{type:"image/jpeg"});
   } finally { URL.revokeObjectURL(url); }
 }
 
-function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number)=>Promise<boolean>;onClose:()=>void}) {
+type Macros = { proteinG:number|null; fatG:number|null; carbsG:number|null };
+
+/** «12.4» → «12,4», а целое — без хвоста: 12 г белка читается лучше, чем 12,0 г. */
+function grams(value:number|null|undefined) {
+  if(value===null||value===undefined) return "—";
+  return (Math.round(value*10)/10).toLocaleString("ru-RU",{maximumFractionDigits:1});
+}
+
+function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,macros:Macros)=>Promise<boolean>;onClose:()=>void}) {
   const [description,setDescription]=useState(""); const [photo,setPhoto]=useState<File|null>(null);
   const [preview,setPreview]=useState(""); const [result,setResult]=useState<FoodAnalysis|null>(null);
   const [title,setTitle]=useState(""); const [calories,setCalories]=useState("");
+  const [protein,setProtein]=useState(""); const [fat,setFat]=useState(""); const [carbs,setCarbs]=useState("");
   const [busy,setBusy]=useState(false); const [saving,setSaving]=useState(false); const [error,setError]=useState("");
   const previewRef=useRef("");
   useEffect(()=>()=>{if(previewRef.current)URL.revokeObjectURL(previewRef.current);},[]);
@@ -114,23 +124,36 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number)=>
       const payload=await response.json().catch(()=>({error:"analysis_failed"})) as FoodAnalysis&{error?:string};
       if(!response.ok)throw new Error(payload.error??"analysis_failed");
       setResult(payload);setTitle(payload.title);setCalories(String(payload.calories));
+      setProtein(String(payload.proteinG));setFat(String(payload.fatG));setCarbs(String(payload.carbsG));
     }catch(reason){const code=reason instanceof Error?reason.message:"analysis_failed";setError(errors[code]??errors.analysis_failed);}
     finally{setBusy(false);}
   }
   async function save(event:FormEvent){
     event.preventDefault();const value=Number(calories);if(!title.trim()||!value||saving)return;
     setSaving(true);setError("");
-    if(await onAdd(title.trim(),value))onClose();else setError("Не удалось добавить запись в дневник.");
+    const number=(text:string)=>{const parsed=Number(text.replace(",","."));return Number.isFinite(parsed)&&parsed>=0?parsed:null;};
+    const ok=await onAdd(title.trim(),value,{proteinG:number(protein),fatG:number(fat),carbsG:number(carbs)});
+    if(ok)onClose();else setError("Не удалось добавить запись в дневник.");
     setSaving(false);
   }
   if(result)return <div className="ai-estimator ai-result">
     <div className="ai-result-head"><span>✨</span><div><b>Оценка готова</b><small>Уверенность: {confidence[result.confidence]}</small></div></div>
     <div className="ai-range"><b>≈ {spaced(result.calories)} ккал</b><small>вероятный диапазон {spaced(result.rangeMin)}–{spaced(result.rangeMax)} ккал</small></div>
+    <div className="macros">
+      <div><b>{grams(result.proteinG)}</b><small>белки, г</small></div>
+      <div><b>{grams(result.fatG)}</b><small>жиры, г</small></div>
+      <div><b>{grams(result.carbsG)}</b><small>углеводы, г</small></div>
+    </div>
     <p>{result.explanation}</p>
     {result.assumptions.length>0&&<details><summary>Что Gemini предположил</summary><ul>{result.assumptions.map(item=><li key={item}>{item}</li>)}</ul></details>}
     <form className="ai-confirm" onSubmit={save}>
       <label>Название<input value={title} onChange={event=>setTitle(event.target.value)} maxLength={120} required/></label>
       <label>Калории<input value={calories} onChange={event=>setCalories(event.target.value)} type="number" min="1" max="10000" required/></label>
+      <div className="ai-macro-fields">
+        <label>Белки, г<input value={protein} onChange={event=>setProtein(event.target.value)} type="number" min="0" max="2000" step="0.1" inputMode="decimal"/></label>
+        <label>Жиры, г<input value={fat} onChange={event=>setFat(event.target.value)} type="number" min="0" max="2000" step="0.1" inputMode="decimal"/></label>
+        <label>Углеводы, г<input value={carbs} onChange={event=>setCarbs(event.target.value)} type="number" min="0" max="2000" step="0.1" inputMode="decimal"/></label>
+      </div>
       <button className="btn-primary" disabled={saving}>{saving?"Добавляю…":"Добавить в дневник"}</button>
     </form>
     <small className="ai-disclaimer">Это приблизительная оценка, а не медицинское измерение. Проверь цифры перед добавлением. Осталось анализов: {result.remaining}.</small>
@@ -355,6 +378,14 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
   const [streak,setStreak]=useState(0); const [coins,setCoins]=useState(0);
   const goal=health.calorieGoal??2000;
   const total=entries.reduce((sum,item)=>sum+item.calories,0);
+  // БЖУ есть только у записей от Gemini, поэтому сводку показываем,
+  // лишь когда хотя бы одна запись их принесла.
+  const macroTotals=entries.reduce((sum,item)=>({
+    protein:sum.protein+(item.proteinG??0),
+    fat:sum.fat+(item.fatG??0),
+    carbs:sum.carbs+(item.carbsG??0),
+    known:sum.known||item.proteinG!=null||item.fatG!=null||item.carbsG!=null,
+  }),{protein:0,fat:0,carbs:0,known:false});
   const ratio=total/goal;
   const percent=Math.min(100,Math.round(ratio*100));
   // Цель здесь — предел, а не достижение: перебор не должен выглядеть победой.
@@ -404,11 +435,12 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
     return()=>{window.removeEventListener("ritm-healthkit-ready",detect);window.removeEventListener("ritm-health-data",receive);};
   },[date]);
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
-  async function createEntry(nextTitle:string,value:number){
+  async function createEntry(nextTitle:string,value:number,macros?:Macros){
     if(!nextTitle.trim()||!value||busy)return false;
     setBusy(true);
     try{
-      const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",body:JSON.stringify({date,title:nextTitle.trim(),calories:value})});
+      const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",
+        body:JSON.stringify({date,title:nextTitle.trim(),calories:value,...macros})});
       const next=[...entries,saved];
       setEntries(next);
       refreshDay();
@@ -467,6 +499,11 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
     {section==="food"&&<div className="day-panel slide-up">
       <div className="card">
         <div className="card-head"><h3>Сегодня</h3><small>{entries.length} {plural(entries.length,"запись","записи","записей")} · {spaced(total)} ккал</small></div>
+        {macroTotals.known&&<div className="macros day-macros">
+          <div><b>{grams(macroTotals.protein)}</b><small>белки, г</small></div>
+          <div><b>{grams(macroTotals.fat)}</b><small>жиры, г</small></div>
+          <div><b>{grams(macroTotals.carbs)}</b><small>углеводы, г</small></div>
+        </div>}
         {entries.length===0
           ? <div className="empty"><span>🍓</span><p>Запиши первый приём пищи — дальше будет проще</p></div>
           : entries.map(item=><div className="entry-row" key={item.id}>

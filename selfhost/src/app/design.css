@@ -206,7 +206,7 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Переключатель разделов — один компонент на все экраны. */
 .segmented {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
   margin: 0; background: var(--track); border-radius: var(--r-track); padding: 5px;
 }
 .segmented button {
@@ -300,9 +300,9 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 /* Плитки-метрики. */
-.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.tiles.three { grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.tiles.four { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .tile {
   background: var(--surface); border: 1.5px solid var(--border);
   border-radius: var(--r-row); padding: 14px 10px; text-align: center;
@@ -322,7 +322,7 @@ button, input, select, textarea { font-family: inherit; }
 .tile.locked { border-style: dashed; background: transparent; opacity: .6; }
 
 /* Столбчатый график в тёмной карточке. */
-.bars-dark { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 9px; align-items: end; height: 118px; }
+.bars-dark { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 9px; align-items: end; height: 118px; }
 .bars-dark > div { display: flex; flex-direction: column; align-items: center; gap: 7px; height: 100%; justify-content: flex-end; }
 .bars-dark i { display: block; width: 100%; border-radius: 8px; background: var(--green); }
 .bars-dark i.peak { background: var(--orange); }
@@ -363,7 +363,7 @@ nav {
   z-index: 10; width: 100%; max-width: 480px;
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   min-height: 0; padding: 0 0 env(safe-area-inset-bottom);
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-top: 1.5px solid var(--border);
   backdrop-filter: saturate(1.4) blur(8px);
@@ -385,7 +385,7 @@ nav button.active { color: var(--green-deep); }
   background: var(--green); color: #fff; font-size: 15px; font-weight: 900; box-shadow: var(--sh-btn);
 }
 .profile-hero .btn-edit:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--green-deep); }
-.badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.badges { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .badge {
   display: grid; place-items: center; height: 52px; border-radius: var(--r-btn);
   background: var(--green-tint); border: 1.5px solid var(--green-line); font-size: 24px;
@@ -426,24 +426,26 @@ nav button.active { color: var(--green-deep); }
 .ob-choice.active > span:first-child { background: var(--surface); }
 
 /* Карточка друга — модальный лист. */
+/* Лист центрируется флексом родителя. Раньше он позиционировался через
+   left:50% + translateX(-50%), и любой media-запрос, менявший inset, уводил
+   его за край экрана: сдвиг оставался, а точка отсчёта менялась. */
 .peek-backdrop {
   position: fixed; inset: 0; z-index: 50;
-  display: flex; justify-content: center;
+  display: flex; justify-content: center; align-items: stretch;
+  padding: max(74px, calc(env(safe-area-inset-top) + 16px)) 12px 12px;
   background: #1b201cad; backdrop-filter: none;
-  padding: 0; animation: peek-fade .15s both;
+  animation: peek-fade .15s both;
 }
 .peek-sheet {
-  position: absolute;
-  inset: max(74px, calc(env(safe-area-inset-top) + 16px)) 12px 12px;
-  left: 50%; transform: translateX(-50%);
-  width: calc(min(100%, 480px) - 24px);
+  position: relative;
+  width: 100%; max-width: 456px;
   display: flex; flex-direction: column; min-height: 0;
   background: var(--bg); border: 0; border-radius: 34px;
   box-shadow: var(--sh-modal); overflow: hidden;
   animation: peek-rise .22s cubic-bezier(.2,.8,.2,1) both;
 }
 @keyframes peek-fade { from { opacity: 0 } }
-@keyframes peek-rise { from { opacity: 0; transform: translate(-50%, 16px) } }
+@keyframes peek-rise { from { opacity: 0; transform: translateY(16px) } }
 .peek-cover { position: relative; display: flex; justify-content: center; flex: none; padding: 16px 0 26px; }
 .peek-cover .character-avatar { width: 86px; height: 86px; border: 0; border-radius: 26px; box-shadow: none; }
 .peek-close {
@@ -452,10 +454,15 @@ nav button.active { color: var(--green-deep); }
   border: 0; border-radius: 50%; background: #ffffffd9; color: #3c4a41;
   font-size: 15px; font-weight: 900;
 }
+/* Прокручивается весь лист целиком. Раньше скроллилась только нижняя часть,
+   и на невысоком экране ей доставалось несколько десятков пикселей —
+   карточки обрезались, а до кнопки было не добраться. */
 .peek-body {
   flex: 1; min-height: 0; margin-top: -18px;
   display: flex; flex-direction: column; gap: 11px;
-  background: var(--bg); border-radius: 28px 28px 0 0; padding: 16px 20px 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  background: var(--bg); border-radius: 28px 28px 0 0;
+  padding: 16px 16px max(16px, env(safe-area-inset-bottom));
 }
 .peek-title { text-align: center; }
 .peek-title h2 { margin: 0 0 1px; font-size: 24px; font-weight: 900; letter-spacing: -0.02em; }
@@ -463,7 +470,7 @@ nav button.active { color: var(--green-deep); }
 .peek-chips { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .peek-chips .chip { font-size: 15px; }
 .peek-chips .chip-plain { background: var(--surface); border: 1.5px solid var(--border); color: var(--ink-2); font-size: 14px; font-weight: 800; padding: 8px 13px; box-shadow: none; }
-.peek-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; }
+.peek-scroll { display: flex; flex-direction: column; gap: 10px; }
 .peek-metric { display: flex; align-items: center; gap: 13px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 13px 16px 15px; }
 .peek-metric > div { flex: 1; min-width: 0; }
 .peek-metric-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
@@ -474,13 +481,13 @@ nav button.active { color: var(--green-deep); }
 .peek-bar { height: 8px; border-radius: 6px; background: var(--track-bar); overflow: hidden; }
 .peek-bar i { display: block; height: 100%; border-radius: 6px; background: var(--green); }
 .peek-bar i.over { background: var(--red); }
-.peek-food { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 9px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 14px 16px; overflow: hidden; }
+.peek-food { display: flex; flex-direction: column; gap: 9px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 14px 16px; overflow: hidden; }
 .peek-food h3 { margin: 0; font-size: 15px; font-weight: 900; }
-.peek-food-list { display: flex; flex-wrap: wrap; gap: 7px; overflow-y: auto; }
+.peek-food-list { display: flex; flex-wrap: wrap; gap: 7px; }
 .peek-food-list span { display: flex; align-items: baseline; gap: 6px; max-width: 100%; background: var(--bg); border-radius: 13px; padding: 7px 11px; font-size: 13px; font-weight: 800; }
 .peek-food-list span > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
 .peek-food-list small { flex: none; color: var(--muted-3); font-size: 12px; font-weight: 800; }
-.day-list { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 6px 16px 8px; }
+.day-list { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 6px 16px 8px; }
 .day-item { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 12px; padding: 11px 0; border-top: 1.5px solid var(--divider); }
 .day-item:first-child { border-top: 0; }
 .day-item > i { display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
@@ -514,7 +521,7 @@ nav button.active { color: var(--green-deep); }
 .history-weight { font-size: 18px; font-weight: 900; }
 .friend-history { padding-bottom: 10px; }
 .friend-history .history-day { box-shadow: none; }
-.peek-empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 8px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 24px; text-align: center; }
+.peek-empty { display: grid; place-content: center; justify-items: center; gap: 8px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-card-sm); padding: 24px; text-align: center; }
 .peek-empty .icon { color: #a9b2ab; }
 .peek-empty p { margin: 0; color: var(--muted-2); font-size: 14px; font-weight: 800; }
 .peek-locked { display: grid; place-items: center; gap: 6px; background: transparent; border: 1.5px dashed var(--border); border-radius: var(--r-card-sm); padding: 18px; text-align: center; }
@@ -528,7 +535,7 @@ nav button.active { color: var(--green-deep); }
   .tiles.four { gap: 6px; }
 }
 @media (min-width: 900px) {
-  .stats-tiles { grid-template-columns: repeat(3, 1fr); }
+  .stats-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* В карточках, где заголовок по центру (лига, профиль), длинное имя переносится. */
@@ -591,18 +598,10 @@ nav button.active { color: var(--green-deep); }
     max-width: none;
   }
   /* Карточка друга открывается по центру, а не во весь экран. */
-  .peek-backdrop { align-items: center; }
-  .peek-sheet {
-    position: relative;
-    inset: auto;
-    left: auto;
-    transform: none;
-    width: min(456px, calc(100% - 48px));
-    height: min(760px, calc(100dvh - 64px));
-  }
-  @keyframes peek-rise { from { opacity: 0; transform: translateY(16px) } }
+  .peek-backdrop { align-items: center; padding: 24px; }
+  .peek-sheet { height: min(760px, calc(100dvh - 64px)); }
 
-  .stats-tiles { grid-template-columns: repeat(3, 1fr); }
+  .stats-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stats-tiles .tile:last-child { grid-column: 1 / -1; }
 
   /* Редактор персонажа — такая же карточка с прибитой к ней нижней кнопкой. */
@@ -658,3 +657,55 @@ nav button.active { color: var(--green-deep); }
 .install-section { display: grid; gap: 12px; padding-top: 4px; }
 .install-note { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
 .install-note b { color: var(--ink); }
+
+/* Сводка БЖУ: три равные колонки, одинаково выглядит и в оценке, и в дневнике. */
+.macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.macros > div {
+  padding: 10px 6px; border: 1.5px solid var(--border); border-radius: var(--r-btn);
+  background: var(--surface); text-align: center;
+}
+.macros b { display: block; font-size: 18px; font-weight: 900; letter-spacing: -0.02em; }
+.macros small { color: var(--muted-2); font-size: 11px; font-weight: 800; }
+.day-macros { margin-top: 10px; }
+.day-macros > div { background: var(--bg); }
+.ai-macro-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ai-macro-fields label { min-width: 0; font-size: 11.5px; }
+
+/* Узкие экраны Android: ничего не обрезаем, только ужимаем. */
+@media (max-width: 400px) {
+  /* Формула «норма − еда + спорт» в одну строку не влезает — переносим,
+     горизонтальная прокрутка внутри карточки читается как обрезка. */
+  .calorie-formula { flex-wrap: wrap; white-space: normal; gap: 4px 9px; }
+  .peek-backdrop { padding: max(56px, calc(env(safe-area-inset-top) + 10px)) 8px 8px; }
+  .peek-body { padding-left: 13px; padding-right: 13px; gap: 10px; }
+  .peek-cover { padding: 12px 0 24px; }
+  .peek-cover .character-avatar { width: 72px; height: 72px; border-radius: 22px; }
+  .peek-title h2 { font-size: 21px; }
+  /* Чипы влезают в одну строку: два коротких вместо двух длинных. */
+  .peek-chips { gap: 6px; }
+  .peek-chips .chip { padding: 6px 10px 7px; font-size: 13px; }
+  .peek-chips .chip-plain { padding: 6px 10px; font-size: 13px; }
+  .tiles.four { gap: 6px; }
+  .tile.four-line { padding: 9px 3px; border-radius: 15px; }
+  .tile.four-line b { font-size: 17px; }
+  .tile.four-line small { font-size: 10px; }
+  .segmented { gap: 4px; padding: 4px; }
+  .segmented button { padding: 9px 2px; font-size: 13px; }
+  .macros > div { padding: 8px 4px; }
+  .macros b { font-size: 16px; }
+  .macros small { font-size: 10px; }
+  .ai-macro-fields { gap: 6px; }
+}
+
+/* Совсем узкие (320–360): переключатель из четырёх вкладок уже не помещается
+   в строку — переносим его в две. */
+@media (max-width: 348px) {
+  .peek-body .segmented { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Плитки и переключатели живут в жёстких сетках, поэтому длинному слову
+   разрешаем переноситься — иначе колонка распирает строку на узком экране. */
+.tile small, .macros small, .peek-chips .chip { overflow-wrap: anywhere; }
+.tile.four-line small { hyphens: auto; }
+.segmented button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

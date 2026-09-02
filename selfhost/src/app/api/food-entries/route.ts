@@ -12,11 +12,20 @@ import { awardDay } from "@/lib/coins";
 async function recalculate(userId: string, date: string) {
   await db.query(`insert into profiles(user_id) values($1) on conflict(user_id) do nothing`, [userId]);
   await db.query(
-    `insert into daily_logs (user_id, log_date, calories_eaten, calorie_goal)
-     select $1,$2,coalesce((select sum(calories) from food_entries where user_id=$1 and log_date=$2),0),
-            coalesce((select calorie_goal from profiles where user_id=$1),2000)
+    `with totals as (
+       select coalesce(sum(calories),0)::int as calories,
+              coalesce(sum(protein_g),0) as protein,
+              coalesce(sum(fat_g),0) as fat,
+              coalesce(sum(carbs_g),0) as carbs
+         from food_entries where user_id=$1 and log_date=$2)
+     insert into daily_logs (user_id, log_date, calories_eaten, calorie_goal, protein_g, fat_g, carbs_g)
+     select $1,$2,totals.calories,
+            coalesce((select calorie_goal from profiles where user_id=$1),2000),
+            totals.protein, totals.fat, totals.carbs
+       from totals
      on conflict (user_id, log_date) do update
-        set calories_eaten=coalesce((select sum(calories) from food_entries where user_id=$1 and log_date=$2),0),
+        set calories_eaten=excluded.calories_eaten,
+            protein_g=excluded.protein_g, fat_g=excluded.fat_g, carbs_g=excluded.carbs_g,
             updated_at=now()`, [userId, date]);
 }
 
@@ -25,7 +34,15 @@ const createSchema = z.object({
   date: dateSchema,
   title: z.string().trim().min(1).max(120),
   calories: z.coerce.number().min(0).max(10000).transform(v => Math.round(v)),
+  proteinG: z.coerce.number().min(0).max(2000).nullish(),
+  fatG: z.coerce.number().min(0).max(2000).nullish(),
+  carbsG: z.coerce.number().min(0).max(2000).nullish(),
 });
+
+/** В базе граммы с одним знаком после запятой — округляем на входе. */
+function grams(value: number | null | undefined) {
+  return value === null || value === undefined ? null : Math.round(value * 10) / 10;
+}
 
 export async function GET(request: Request) {
   const user = await requireUser(request);
@@ -33,7 +50,9 @@ export async function GET(request: Request) {
   const parsed = dateSchema.safeParse(new URL(request.url).searchParams.get("date"));
   if (!parsed.success) return Response.json({ error: "invalid_date" }, { status: 400 });
   const result = await db.query(
-    `select id, title, calories from food_entries
+    `select id, title, calories,
+            protein_g::float8 as "proteinG", fat_g::float8 as "fatG", carbs_g::float8 as "carbsG"
+       from food_entries
       where user_id=$1 and log_date=$2 order by created_at`, [user.id, parsed.data]);
   return Response.json(result.rows);
 }
@@ -45,13 +64,15 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "invalid_entry" }, { status: 400 });
   const entry = parsed.data;
   const id = randomUUID();
+  const protein=grams(entry.proteinG), fat=grams(entry.fatG), carbs=grams(entry.carbsG);
   await db.query(
-    `insert into food_entries (id, user_id, log_date, title, meal, calories)
-     values ($1,$2,$3,$4,'other',$5)`, [id, user.id, entry.date, entry.title, entry.calories]);
+    `insert into food_entries (id, user_id, log_date, title, meal, calories, protein_g, fat_g, carbs_g)
+     values ($1,$2,$3,$4,'other',$5,$6,$7,$8)`,
+    [id, user.id, entry.date, entry.title, entry.calories, protein, fat, carbs]);
   await recalculate(user.id, entry.date);
   await awardDay(user.id, entry.date);
   await publishStreak(user.id, entry.date, await currentStreak(user.id));
-  return Response.json({ id, title: entry.title, calories: entry.calories });
+  return Response.json({ id, title: entry.title, calories: entry.calories, proteinG: protein, fatG: fat, carbsG: carbs });
 }
 
 /** Удаляем только свою запись: чужой id ничего не тронет. */

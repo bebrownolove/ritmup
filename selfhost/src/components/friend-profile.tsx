@@ -51,6 +51,15 @@ function dayLabel(date:string) {
   return text[0].toUpperCase()+text.slice(1);
 }
 
+const MONTHS_GENITIVE = ["января","февраля","марта","апреля","мая","июня",
+  "июля","августа","сентября","октября","ноября","декабря"];
+
+/** «С августа 2026», а не «С август 2026 г.» — предлог требует родительного падежа. */
+function sinceLabel(date:string) {
+  const moment=new Date(`${date}T00:00`);
+  return `С ${MONTHS_GENITIVE[moment.getMonth()]} ${moment.getFullYear()}`;
+}
+
 function Locked({label}:{label:string}) {
   return <div className="peek-locked"><span aria-hidden>🔒</span><small>{label}</small></div>;
 }
@@ -109,7 +118,7 @@ export function FriendProfileSheet({userId,onClose,onChanged}:{userId:string;onC
 
           <div className="peek-chips">
             {profile.streak!==null&&<span className="chip chip-streak"><FlameIcon size={19}/>{profile.streak} {plural(profile.streak,"день","дня","дней")} подряд</span>}
-            <span className="chip chip-plain">С {new Date(`${profile.joinedAt}T00:00`).toLocaleDateString("ru",{month:"long",year:"numeric"})}</span>
+            <span className="chip chip-plain">{sinceLabel(profile.joinedAt)}</span>
           </div>
 
           <div className="tiles four">
