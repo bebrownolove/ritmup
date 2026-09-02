@@ -114,11 +114,14 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 45_000);
 
   /**
-   * Обдумывание не улучшает оценку порции, но заметно задерживает ответ,
-   * поэтому по умолчанию выключаем его. Не всякая модель принимает такую
-   * настройку — если сервер ответит 400 про thinking, повторим без неё.
+   * thinkingConfig здесь не передаём: вместе с responseJsonSchema модель
+   * отвечает 400 «Request contains an invalid argument», причём без указания
+   * на виновника — поймать это по тексту ошибки нельзя.
+   * maxOutputTokens берём с запасом: русский текст объяснения и допущений
+   * занимает заметно больше токенов, чем кажется, а обрезанный JSON
+   * не разберётся.
    */
-  const askGemini = (withThinking: boolean) =>
+  const askGemini = () =>
     fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY as string },
@@ -131,20 +134,15 @@ export async function POST(request: Request) {
           temperature: 0.2,
           responseMimeType: "application/json",
           responseJsonSchema: responseSchema,
-          maxOutputTokens: 900,
-          ...(withThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+          maxOutputTokens: 2048,
         },
       }),
       signal: controller.signal,
     });
 
   try {
-    let response = await askGemini(false);
-    let payload = await response.json().catch(() => null) as GeminiResponse | null;
-    if (response.status === 400 && /thinking/i.test(payload?.error?.message ?? "")) {
-      response = await askGemini(true);
-      payload = await response.json().catch(() => null) as GeminiResponse | null;
-    }
+    const response = await askGemini();
+    const payload = await response.json().catch(() => null) as GeminiResponse | null;
     if (!response.ok) {
       console.error("Gemini food analysis failed", response.status, payload?.error?.message ?? "unknown_error");
       return Response.json({ error: response.status === 429 ? "ai_busy" : "analysis_failed", remaining: quota.remaining }, { status: response.status === 429 ? 429 : 502 });
