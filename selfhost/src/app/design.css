@@ -709,3 +709,9 @@ nav button.active { color: var(--green-deep); }
 .tile small, .macros small, .peek-chips .chip { overflow-wrap: anywhere; }
 .tile.four-line small { hyphens: auto; }
 .segmented button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Почему кнопка неактивна — раньше форма просто молчала. */
+.ai-need {
+  margin: 0; padding: 10px 12px; border-radius: var(--r-btn);
+  background: var(--bg); color: var(--muted); font-size: 13px; font-weight: 700; text-align: center;
+}

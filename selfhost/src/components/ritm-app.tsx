@@ -107,19 +107,24 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,ma
     if(previewRef.current)URL.revokeObjectURL(previewRef.current);
     const url=next?URL.createObjectURL(next):"";previewRef.current=url;setPreview(url);setPhoto(next);
   }
+  // Достаточно чего-то одного — фотографии или описания.
+  const ready=Boolean(photo)||description.trim().length>0;
   const confidence={low:"низкая",medium:"средняя",high:"высокая"};
   const errors:Record<string,string>={
     ai_not_configured:"Анализ пока не подключён на сервере.",daily_limit:"На сегодня использованы все 100 анализов.",
     ai_busy:"Gemini сейчас перегружен — попробуй чуть позже.",analysis_timeout:"Gemini отвечает слишком долго — попробуй ещё раз.",
-    invalid_photo:"Не удалось прочитать фото. Попробуй сделать его ещё раз.",invalid_description:"Опиши порцию чуть подробнее.",
+    invalid_photo:"Не удалось прочитать фото. Попробуй сделать его ещё раз.",invalid_description:"Описание слишком длинное — сократи.",
+    nothing_to_analyze:"Добавь фото или опиши порцию — хоть что-то одно.",
     invalid_ai_response:"Gemini не смог уверенно разобрать блюдо. Добавь деталей в описание.",analysis_failed:"Не удалось проанализировать еду.",
   };
   async function analyze(event:FormEvent){
-    event.preventDefault();if(!photo||description.trim().length<10||busy)return;
+    event.preventDefault();if(!ready||busy)return;
     setBusy(true);setError("");setResult(null);
     try{
-      const prepared=await resizeFoodPhoto(photo);
-      const form=new FormData();form.set("description",description.trim());form.set("photo",prepared);
+      const form=new FormData();
+      form.set("description",description.trim());
+      // Фото необязательно: если его нет, Gemini считает по одному описанию.
+      if(photo) form.set("photo",await resizeFoodPhoto(photo));
       const response=await fetch("/api/food-analyze",{method:"POST",body:form});
       const payload=await response.json().catch(()=>({error:"analysis_failed"})) as FoodAnalysis&{error?:string};
       if(!response.ok)throw new Error(payload.error??"analysis_failed");
@@ -129,7 +134,9 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,ma
     finally{setBusy(false);}
   }
   async function save(event:FormEvent){
-    event.preventDefault();const value=Number(calories);if(!title.trim()||!value||saving)return;
+    event.preventDefault();
+    const value=Number(calories);
+    if(!title.trim()||calories.trim()===""||!Number.isFinite(value)||value<0||saving)return;
     setSaving(true);setError("");
     const number=(text:string)=>{const parsed=Number(text.replace(",","."));return Number.isFinite(parsed)&&parsed>=0?parsed:null;};
     const ok=await onAdd(title.trim(),value,{proteinG:number(protein),fatG:number(fat),carbsG:number(carbs)});
@@ -148,7 +155,7 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,ma
     {result.assumptions.length>0&&<details><summary>Что Gemini предположил</summary><ul>{result.assumptions.map(item=><li key={item}>{item}</li>)}</ul></details>}
     <form className="ai-confirm" onSubmit={save}>
       <label>Название<input value={title} onChange={event=>setTitle(event.target.value)} maxLength={120} required/></label>
-      <label>Калории<input value={calories} onChange={event=>setCalories(event.target.value)} type="number" min="1" max="10000" required/></label>
+      <label>Калории<input value={calories} onChange={event=>setCalories(event.target.value)} type="number" min="0" max="10000" required/></label>
       <div className="ai-macro-fields">
         <label>Белки, г<input value={protein} onChange={event=>setProtein(event.target.value)} type="number" min="0" max="2000" step="0.1" inputMode="decimal"/></label>
         <label>Жиры, г<input value={fat} onChange={event=>setFat(event.target.value)} type="number" min="0" max="2000" step="0.1" inputMode="decimal"/></label>
@@ -162,16 +169,17 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,ma
   </div>;
   return <form className="ai-estimator" onSubmit={analyze}>
     <div className="ai-heading"><div><span>✨</span><h4>Оценить с Gemini</h4></div><button type="button" onClick={onClose} aria-label="Закрыть">×</button></div>
-    <label className="ai-field"><b>1. Опиши порцию честно</b><textarea value={description} onChange={event=>setDescription(event.target.value)} minLength={10} maxLength={800} required rows={4} placeholder="Например: около 250 г домашнего плова с курицей, масла примерно столовая ложка. На фото вся порция."/><small>Укажи примерный вес или объём, состав, масло и соусы. Для упаковки — бренд и размер.</small></label>
+    <label className="ai-field"><b>Опиши порцию</b><textarea value={description} onChange={event=>setDescription(event.target.value)} maxLength={800} rows={4} placeholder="Например: около 250 г домашнего плова с курицей, масла примерно столовая ложка."/><small>Чем точнее вес, объём, состав и бренд — тем точнее оценка.</small></label>
     <label className={`ai-photo${preview?" has-photo":""}`}>
-      <input type="file" accept="image/*" capture="environment" required onChange={event=>choosePhoto(event.target.files?.[0]??null)}/>
+      <input type="file" accept="image/*" capture="environment" onChange={event=>choosePhoto(event.target.files?.[0]??null)}/>
       {/* blob: — одноразовый локальный предпросмотр, оптимизация Next Image здесь неприменима. */}
       {preview?<img src={preview} alt="Выбранная еда"/>:<span>📷</span> /* eslint-disable-line @next/next/no-img-element */}
-      <b>{preview?"Сменить фотографию":"2. Сделать или выбрать фото"}</b>
+      <b>{preview?"Сменить фотографию":"Сделать или выбрать фото"}</b>
     </label>
     <p className="ai-privacy">Фото отправится Google Gemini для анализа и не сохранится в Ритме. На бесплатном тарифе Google может использовать данные для улучшения своих продуктов.</p>
     {error&&<p className="ai-error" role="alert">{error}</p>}
-    <button className="btn-primary" disabled={busy||!photo||description.trim().length<10}>{busy?"Gemini считает порцию…":"Оценить калории"}</button>
+    {!ready&&<p className="ai-need">Заполни что-то одно: опиши порцию или добавь фото.</p>}
+    <button className="btn-primary" disabled={busy||!ready}>{busy?"Gemini считает порцию…":"Оценить калории"}</button>
   </form>;
 }
 
@@ -436,7 +444,7 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
   },[date]);
   function syncHealth(){const bridge=window.webkit?.messageHandlers?.ritmHealth;if(!bridge)return;setHealthBusy(true);setHealthStatus("Читаем Apple Health…");bridge.postMessage({action:"syncToday"});}
   async function createEntry(nextTitle:string,value:number,macros?:Macros){
-    if(!nextTitle.trim()||!value||busy)return false;
+    if(!nextTitle.trim()||!Number.isFinite(value)||value<0||busy)return false;
     setBusy(true);
     try{
       const saved=await jsonFetch<Entry>("/api/food-entries",{method:"POST",
@@ -449,7 +457,8 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
   }
   async function add(event:FormEvent){
     event.preventDefault();
-    const value=Number(calories); if(!title.trim()||!value||busy)return;
+    const value=Number(calories);
+    if(!title.trim()||calories.trim()===""||!Number.isFinite(value)||value<0||busy)return;
     if(await createEntry(title,value)){setTitle("");setCalories("");setAdding(false);}
   }
   function cancelAdding(){
@@ -517,7 +526,7 @@ function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=
           : adding
           ? <form className="quick-add" onSubmit={add} style={{marginTop:12}}>
               <input value={title} onChange={e=>setTitle(e.target.value)} autoFocus placeholder="Что съел? Например, клубника"/>
-              <input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="1" max="10000" placeholder="ккал"/>
+              <input value={calories} onChange={e=>setCalories(e.target.value)} type="number" min="0" max="10000" placeholder="ккал"/>
               <button className="btn-primary" disabled={busy}>{busy?"…":"Добавить"}</button>
               <button type="button" className="quick-cancel" disabled={busy} onClick={cancelAdding}>Отмена</button>
             </form>
