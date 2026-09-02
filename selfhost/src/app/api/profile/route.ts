@@ -30,6 +30,7 @@ const patchSchema = z.object({
   goalDirection: z.enum(["lose","keep","gain"]).optional(),
   avatarConfig: avatarSchema.optional(),
   onboardingCompleted: z.boolean().optional(),
+  seenRelease: z.string().trim().max(32).optional(),
 });
 
 /** Пускаем в базу только настоящую зону IANA — иначе запрос с ней потом упадёт. */
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
             activity_level as "activityLevel", target_weight_kg::float8 as "targetWeightKg",
             goal_direction as "goalDirection", avatar_config as "avatarConfig",
             avatar_unlocked as "avatarUnlocked", coins,
-            onboarding_completed as "onboardingCompleted"
+            onboarding_completed as "onboardingCompleted", seen_release as "seenRelease"
        from profiles where user_id = $1`, [user.id]);
   return Response.json(result.rows[0]);
 }
@@ -74,8 +75,8 @@ export async function PATCH(request: Request) {
   await db.query(
     `insert into profiles (user_id, bio, is_discoverable, share_streak, share_goal_hits, share_workouts, timezone, calorie_goal,
        height_cm, sex, birth_year, activity_level, target_weight_kg, onboarding_completed, goal_direction, avatar_config,
-       share_weight, share_calories, share_steps, share_food)
-     values ($1, $2, $3, $4, $5, $6, $7, coalesce($8,2000), $9, $10, $11, coalesce($12,'light'), $13, coalesce($14,false), $15, coalesce($16::jsonb,'{}'::jsonb), $17, $18, $19, $20)
+       share_weight, share_calories, share_steps, share_food, seen_release)
+     values ($1, $2, $3, $4, $5, $6, $7, coalesce($8,2000), $9, $10, $11, coalesce($12,'light'), $13, coalesce($14,false), $15, coalesce($16::jsonb,'{}'::jsonb), $17, $18, $19, $20, $21)
      on conflict (user_id) do update set bio=excluded.bio, is_discoverable=excluded.is_discoverable,
        share_streak=excluded.share_streak, share_goal_hits=excluded.share_goal_hits,
        share_workouts=excluded.share_workouts, timezone=excluded.timezone,
@@ -90,7 +91,8 @@ export async function PATCH(request: Request) {
        share_weight=coalesce($17,profiles.share_weight),
        share_calories=coalesce($18,profiles.share_calories),
        share_steps=coalesce($19,profiles.share_steps),
-       share_food=coalesce($20,profiles.share_food)`,
+       share_food=coalesce($20,profiles.share_food),
+       seen_release=coalesce($21,profiles.seen_release)`,
     [user.id, value.bio ?? old.bio ?? "", value.isDiscoverable ?? old.is_discoverable ?? true,
       value.shareStreak ?? old.share_streak ?? true, value.shareGoalHits ?? old.share_goal_hits ?? true,
       value.shareWorkouts ?? old.share_workouts ?? true,
@@ -102,7 +104,8 @@ export async function PATCH(request: Request) {
       value.shareWeight ?? old.share_weight ?? false,
       value.shareCalories ?? old.share_calories ?? false,
       value.shareSteps ?? old.share_steps ?? false,
-      value.shareFood ?? old.share_food ?? false]);
+      value.shareFood ?? old.share_food ?? false,
+      value.seenRelease ?? null]);
   // Новая норма должна сразу появиться на экране «Сегодня». Раньше дневная
   // запись продолжала хранить старые 2000 ккал и перекрывала профиль.
   if (value.calorieGoal !== undefined) {

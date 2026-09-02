@@ -715,3 +715,38 @@ nav button.active { color: var(--green-deep); }
   margin: 0; padding: 10px 12px; border-radius: var(--r-btn);
   background: var(--bg); color: var(--muted); font-size: 13px; font-weight: 700; text-align: center;
 }
+
+/* Объявление о новинках — показывается один раз на аккаунт. */
+.release-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  background: #1b201cc4; animation: peek-fade .16s both;
+}
+.release-card {
+  width: 100%; max-width: 400px; max-height: 100%;
+  overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 20px; border-radius: var(--r-hero);
+  background: var(--surface); box-shadow: var(--sh-modal);
+  animation: peek-rise .24s cubic-bezier(.2,.8,.2,1) both;
+  text-align: center;
+}
+.release-top { font-size: 38px; line-height: 1; }
+.release-card h2 { margin: 0; font-size: 23px; font-weight: 900; letter-spacing: -0.02em; }
+.release-lead { margin: 0; color: var(--muted-2); font-size: 14px; }
+.release-list { display: grid; gap: 10px; margin: 4px 0 6px; text-align: left; }
+.release-item {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 11px;
+  padding: 12px 13px; border-radius: var(--r-btn); background: var(--bg);
+}
+.release-item > span { font-size: 22px; line-height: 1.2; }
+.release-item b { display: block; font-size: 15px; font-weight: 900; }
+.release-item small { color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+@media (max-width: 400px) {
+  .release-card { padding: 18px 16px; gap: 10px; }
+  .release-item { padding: 10px 11px; gap: 9px; grid-template-columns: 28px minmax(0, 1fr); }
+  .release-item > span { font-size: 19px; }
+  .release-item small { font-size: 12.5px; }
+}

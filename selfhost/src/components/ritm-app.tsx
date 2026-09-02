@@ -7,6 +7,7 @@ import { BodyCard } from "@/components/body-card";
 import { Leaderboard, Milestone, RepairCard } from "@/components/progress-extras";
 import { Onboarding } from "@/components/onboarding";
 import { FriendProfileSheet } from "@/components/friend-profile";
+import { RELEASE_KEY, ReleaseNotes } from "@/components/release-notes";
 import { BarsIcon, CoinIcon, FlameIcon, FriendsIcon, HomeIcon, PersonIcon } from "@/components/icons";
 import { basalRate, goalCalories, maintenance } from "@/lib/body";
 import { AvatarEditor, CharacterAvatar } from "@/components/avatar-editor";
@@ -951,6 +952,7 @@ export function RitmApp() {
   const [avatar,setAvatar]=useState<Partial<AvatarConfig>|null>(null);
   const [unlocked,setUnlocked]=useState<string[]>([]);
   const [maker,setMaker]=useState(false);
+  const [showRelease,setShowRelease]=useState(false);
   const updateHeader=useCallback((days:number,coins:number)=>{setHeaderStreak(days);setHeaderCoins(coins);},[]);
   const [onboarding,setOnboarding]=useState<"loading"|"show"|"done">("loading");
   const [onboardingUser,setOnboardingUser]=useState<string|null>(null);
@@ -959,9 +961,11 @@ export function RitmApp() {
   useEffect(()=>{
     if(!userId) return;
     // Определяем пояс браузером один раз. Если человек выбрал его руками, не трогаем.
-    void jsonFetch<{timezone?:string|null;onboardingCompleted?:boolean;avatarConfig?:Partial<AvatarConfig>|null;avatarUnlocked?:string[]|null}>("/api/profile").then(profile=>{
+    void jsonFetch<{timezone?:string|null;onboardingCompleted?:boolean;avatarConfig?:Partial<AvatarConfig>|null;avatarUnlocked?:string[]|null;seenRelease?:string|null}>("/api/profile").then(profile=>{
       setOnboarding(profile.onboardingCompleted?"done":"show");
       setOnboardingUser(userId);
+      // Новичку объявление не нужно: он и так видит всё впервые.
+      setShowRelease(Boolean(profile.onboardingCompleted)&&profile.seenRelease!==RELEASE_KEY);
       setAvatar(profile.avatarConfig??null);
       setUnlocked(profile.avatarUnlocked??[]);
       if(profile.timezone) return;
@@ -982,6 +986,10 @@ export function RitmApp() {
     setTab("today");
     void jsonFetch<{days:number;coins:number}>("/api/streak").then(result=>{setHeaderStreak(result.days);setHeaderCoins(result.coins);}).catch(()=>{});
   }}/>;
+  function dismissRelease(){
+    setShowRelease(false);
+    void jsonFetch("/api/profile",{method:"PATCH",body:JSON.stringify({seenRelease:RELEASE_KEY})}).catch(()=>{});
+  }
   if(maker)return <AvatarEditor initial={avatar} coins={headerCoins} unlocked={unlocked}
     onSaved={value=>{setAvatar(value);setMaker(false);}} onCoins={setHeaderCoins} onClose={()=>setMaker(false)}/>;
   const navItems:[Tab,React.ReactNode,string][]=[
@@ -1007,6 +1015,7 @@ export function RitmApp() {
       {tab==="friends"&&<Friends/>}
       {tab==="profile"&&<Profile user={user} avatar={avatar} streak={headerStreak} onOpenMaker={()=>setMaker(true)} onOpenOnboarding={()=>setOnboarding("show")}/>}
     </div>
+    {showRelease&&<ReleaseNotes onClose={dismissRelease}/>}
     <nav>{navItems.map(([key,icon,label])=>
       <button key={key} className={tab===key?"active":""} aria-current={tab===key?"page":undefined} onClick={()=>setTab(key)}>{icon}{label}</button>)}</nav>
   </main>;
