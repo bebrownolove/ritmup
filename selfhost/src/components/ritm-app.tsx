@@ -342,7 +342,8 @@ type WeekCell = { date:string; label:string; state:"ok"|"over"|"today"|"future"|
 
 function Today({onStreak,avatar,userName}:{onStreak?:(days:number,coins:number)=>void;avatar?:Partial<AvatarConfig>|null;userName:string}) {
   const date=todayKey();
-  const [adding,setAdding]=useState(false);
+  const [adding,setAdding]=useState(()=>
+    typeof window!=="undefined"&&new URLSearchParams(window.location.search).get("add")==="food");
   const [aiAdding,setAiAdding]=useState(false);
   const [week,setWeek]=useState<WeekCell[]>([]);
   const firstName=userName.split(" ")[0]||userName;
@@ -545,15 +546,49 @@ function Friends() {
 
 function PersonRow({person,action,onOpen}:{person:Person;action?:React.ReactNode;onOpen?:()=>void}) {const hasShared=person.status==="accepted"&&(person.sharesWeight||person.sharesCalories||person.sharesSteps||person.sharesFood);return <div className={`person${hasShared?" with-metrics":""}`}><CharacterAvatar value={person.avatarConfig} size="small" label={`Персонаж ${person.name}`}/><button type="button" className="person-name" onClick={onOpen} disabled={!onOpen}><b>{person.name}</b><small>@{person.username??"без-ника"}</small></button>{action&&<div className="person-action">{action}</div>}{hasShared&&<div className="friend-metrics">{person.sharesWeight&&<span>⚖️ <b>{person.sharedWeightKg??"—"}</b> кг</span>}{person.sharesCalories&&<span>🍽️ <b>{person.sharedCalories??"—"}</b> ккал</span>}{person.sharesSteps&&<span>👟 <b>{person.sharedSteps??"—"}</b> шагов</span>}{person.sharesFood&&<div className="friend-food"><b>Что ел сегодня</b>{person.sharedFood?.length?<p>{person.sharedFood.join(" · ")}</p>:<p>Пока ничего не записал</p>}</div>}</div>}</div>}
 
+/**
+ * Предложение установить приложение. На Android и в десктопном Chrome браузер
+ * сам отдаёт beforeinstallprompt — там показываем кнопку, которая вызывает
+ * системное окно. Safari такого события не даёт, поэтому для iPhone остаётся
+ * короткая инструкция.
+ */
 function InstallHint() {
-  const [show,setShow]=useState(false);
-  useEffect(()=>{void Promise.resolve().then(()=>{
-    const standalone=window.matchMedia("(display-mode: standalone)").matches||(window.navigator as Navigator&{standalone?:boolean}).standalone===true;
+  const [mode,setMode]=useState<"off"|"prompt"|"ios">("off");
+  const [promptEvent,setPromptEvent]=useState<InstallPromptEvent|null>(null);
+  const [note,setNote]=useState("");
+  useEffect(()=>{
+    const standalone=window.matchMedia("(display-mode: standalone)").matches
+      ||window.matchMedia("(display-mode: minimal-ui)").matches
+      ||(window.navigator as Navigator&{standalone?:boolean}).standalone===true;
     if(standalone||localStorage.getItem("ritm-install-hint")==="off")return;
-    setShow(/iPad|iPhone|iPod/.test(navigator.userAgent));
-  });},[]);
-  function hide(){localStorage.setItem("ritm-install-hint","off");setShow(false);}
-  if(!show)return null;
+    const capture=(event:Event)=>{
+      event.preventDefault();
+      setPromptEvent(event as InstallPromptEvent);
+      setMode("prompt");
+    };
+    window.addEventListener("beforeinstallprompt",capture);
+    // Установили — подсказка больше не нужна ни в этой вкладке, ни в следующей.
+    const installed=()=>{localStorage.setItem("ritm-install-hint","off");setMode("off");};
+    window.addEventListener("appinstalled",installed);
+    if(/iPad|iPhone|iPod/.test(navigator.userAgent)) queueMicrotask(()=>setMode(current=>current==="off"?"ios":current));
+    return()=>{window.removeEventListener("beforeinstallprompt",capture);window.removeEventListener("appinstalled",installed);};
+  },[]);
+  function hide(){localStorage.setItem("ritm-install-hint","off");setMode("off");}
+  async function install(){
+    if(!promptEvent)return;
+    await promptEvent.prompt();
+    const choice=await promptEvent.userChoice;
+    setPromptEvent(null);
+    if(choice.outcome==="accepted"){hide();return;}
+    setNote("Можно установить позже этой же кнопкой.");
+  }
+  if(mode==="off")return null;
+  if(mode==="prompt")return <div className="install-hint pop-in">
+    <span aria-hidden>📲</span>
+    <p><b>Установить «Ритм»?</b> Появится на главном экране и будет открываться без адресной строки.{note&&<> {note}</>}</p>
+    <button className="install-go" onClick={()=>void install()}>Установить</button>
+    <button onClick={hide} aria-label="Скрыть подсказку">×</button>
+  </div>;
   return <div className="install-hint pop-in"><span aria-hidden>📲</span><p><b>Поставь «Ритм» на домашний экран.</b> Откроется как обычное приложение, без адресной строки: кнопка «Поделиться» внизу Safari → «На экран „Домой“».</p><button onClick={hide} aria-label="Скрыть подсказку">×</button></div>;
 }
 
@@ -760,7 +795,10 @@ function ThemeControl() {
     if(next==="system")document.documentElement.removeAttribute("data-theme");
     else document.documentElement.setAttribute("data-theme",next);
     const metas=document.querySelectorAll('meta[name="theme-color"]');
-    metas.forEach((meta,index)=>meta.setAttribute("content",next==="system"?(index===0?"#ffffff":"#121713"):next==="dark"?"#121713":"#ffffff"));
+    // Те же цвета, что в layout.tsx: строка состояния должна совпадать с фоном.
+    const light="#f5f1e7", dark="#101411";
+    metas.forEach((meta,index)=>meta.setAttribute("content",
+      next==="system"?(index===0?light:dark):next==="dark"?dark:light));
   }
   const options:[Theme,string,string][]=[["system","◐","Как на iPhone"],["light","☀️","Светлая"],["dark","🌙","Тёмная"]];
   return <div className="theme-picker" role="radiogroup" aria-label="Тема оформления">{options.map(([key,icon,label])=><button key={key} role="radio" aria-checked={theme===key} className={theme===key?"active":""} onClick={()=>change(key)}><span>{icon}</span><b>{label}</b><i>✓</i></button>)}</div>;
@@ -768,7 +806,13 @@ function ThemeControl() {
 function Toggle({label,value,onClick}:{label:string;value:boolean;onClick:()=>void}){return <button className="toggle-row" onClick={onClick}><span>{label}</span><i className={value?"on":""}><u/></i></button>}
 
 export function RitmApp() {
-  const session=authClient.useSession(); const [tab,setTab]=useState<Tab>("today"); const [headerCoins,setHeaderCoins]=useState(0); const [headerStreak,setHeaderStreak]=useState(0);
+  const session=authClient.useSession();
+  // Ярлыки с домашнего экрана Android приходят как /?tab=stats и т.п.
+  const [tab,setTab]=useState<Tab>(()=>{
+    if(typeof window==="undefined") return "today";
+    const wanted=new URLSearchParams(window.location.search).get("tab");
+    return wanted==="stats"||wanted==="friends"||wanted==="profile"?wanted:"today";
+  }); const [headerCoins,setHeaderCoins]=useState(0); const [headerStreak,setHeaderStreak]=useState(0);
   const [avatar,setAvatar]=useState<Partial<AvatarConfig>|null>(null);
   const [unlocked,setUnlocked]=useState<string[]>([]);
   const [maker,setMaker]=useState(false);

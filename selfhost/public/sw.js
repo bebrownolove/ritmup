@@ -1,7 +1,7 @@
 // Оболочка приложения «Ритм»: мгновенный запуск с домашнего экрана и работа без сети.
 // Данные аккаунта (/api/*) никогда не кэшируются.
-const CACHE = "ritm-shell-v4";
-const SHELL = ["/", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.webmanifest"];
+const CACHE = "ritm-shell-v5";
+const SHELL = ["/", "/icon-192.png", "/icon-512.png", "/icon-maskable-192.png", "/apple-touch-icon.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));

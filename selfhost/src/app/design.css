@@ -533,3 +533,123 @@ nav button.active { color: var(--green-deep); }
 
 /* В карточках, где заголовок по центру (лига, профиль), длинное имя переносится. */
 .profile-hero h2, .hero-dark[style*="text-align"] h2 { white-space: normal; overflow: visible; }
+
+/* Десктоп: колонка приложения превращается в самостоятельную карточку.
+   Иначе на широком экране она читается как обрезок страницы, а навигация
+   висит у нижнего края окна браузера, а не у своего экрана. */
+@media (min-width: 900px) {
+  body {
+    background:
+      radial-gradient(circle at 50% -10%, #f0eee6 0, transparent 55%),
+      var(--bg-outside);
+  }
+  .app-shell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: min(920px, calc(100dvh - 56px));
+    min-height: 560px;
+    margin-block: 28px;
+    padding-bottom: 0;
+    border: 1px solid #dcd9d0;
+    border-radius: 32px;
+    box-shadow: 0 24px 60px #2632381f;
+    overflow: hidden;
+  }
+  .app-shell header {
+    position: static;
+    flex: none;
+    padding-top: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-shell .content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-top: 16px;
+    padding-bottom: calc(var(--nav-h) + 16px);
+  }
+  /* Навигация и плавающая кнопка живут внутри карточки, а не в окне. */
+  nav {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    height: var(--nav-h);
+    padding-bottom: 0;
+    border-radius: 0 0 31px 31px;
+  }
+  .floating {
+    position: absolute;
+    left: 0;
+    bottom: var(--nav-h);
+    transform: none;
+    width: 100%;
+    max-width: none;
+  }
+  /* Карточка друга открывается по центру, а не во весь экран. */
+  .peek-backdrop { align-items: center; }
+  .peek-sheet {
+    position: relative;
+    inset: auto;
+    left: auto;
+    transform: none;
+    width: min(456px, calc(100% - 48px));
+    height: min(760px, calc(100dvh - 64px));
+  }
+  @keyframes peek-rise { from { opacity: 0; transform: translateY(16px) } }
+
+  .stats-tiles { grid-template-columns: repeat(3, 1fr); }
+  .stats-tiles .tile:last-child { grid-column: 1 / -1; }
+
+  /* Редактор персонажа — такая же карточка с прибитой к ней нижней кнопкой. */
+  .maker {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 560px;
+    margin: 28px auto;
+    height: min(920px, calc(100dvh - 56px));
+    padding-bottom: 0;
+    border: 1px solid #dcd9d0;
+    border-radius: 32px;
+    box-shadow: 0 24px 60px #2632381f;
+    overflow: hidden;
+  }
+  .maker-bar { position: static; flex: none; padding-top: 16px; }
+  .maker-groups { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 90px; }
+  .maker-foot {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    padding-bottom: 12px;
+    border-radius: 0 0 31px 31px;
+  }
+}
+
+/* Предложение установить приложение: на Android в подсказке появляется
+   кнопка, вызывающая системное окно установки. */
+.install-hint {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  margin-bottom: 12px; padding: 13px 14px;
+  border: 1.5px solid var(--green-line); border-radius: var(--r-card-sm);
+  background: var(--green-tint);
+}
+.install-hint > span { font-size: 20px; line-height: 1; }
+.install-hint p { flex: 1; min-width: 150px; margin: 0; color: var(--green-text-2); font-size: 13px; line-height: 1.45; }
+.install-hint p b { color: var(--green-text); }
+.install-hint .install-go {
+  flex: none; border: 0; border-radius: var(--r-pill); padding: 10px 16px;
+  background: var(--green); color: #fff; font-size: 14px; font-weight: 900;
+  box-shadow: 0 3px 0 var(--green-deep);
+}
+.install-hint .install-go:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--green-deep); }
+.install-hint > button:last-child {
+  flex: none; border: 0; background: transparent;
+  color: var(--green-text-2); font-size: 20px; padding: 0 2px;
+}
