@@ -653,3 +653,8 @@ nav button.active { color: var(--green-deep); }
   flex: none; border: 0; background: transparent;
   color: var(--green-text-2); font-size: 20px; padding: 0 2px;
 }
+
+/* Раздел установки в профиле: доступен и после того, как подсказку закрыли. */
+.install-section { display: grid; gap: 12px; padding-top: 4px; }
+.install-note { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.install-note b { color: var(--ink); }

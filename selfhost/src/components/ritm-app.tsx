@@ -552,8 +552,78 @@ function PersonRow({person,action,onOpen}:{person:Person;action?:React.ReactNode
  * системное окно. Safari такого события не даёт, поэтому для iPhone остаётся
  * короткая инструкция.
  */
+type InstallWay = { key:string; title:string; steps:React.ReactNode };
+
+/**
+ * Как поставить приложение в конкретном браузере.
+ *
+ * Системное окно установки умеет вызывать только Chromium: он присылает
+ * beforeinstallprompt, и тогда достаточно одной кнопки. Firefox и Safari
+ * такого события не дают — там установка живёт в меню браузера, поэтому
+ * остаётся показать, куда нажимать.
+ */
+function installWay():InstallWay|null {
+  const agent=navigator.userAgent;
+  const firefox=/Firefox\/|FxiOS/.test(agent);
+  const ios=/iPad|iPhone|iPod/.test(agent)
+    ||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  const android=/Android/.test(agent);
+
+  if(ios) return {key:"ios",title:"Поставь «Ритм» на домашний экран",
+    steps:<>Кнопка <b>Поделиться</b> внизу Safari → <b>«На экран „Домой“»</b> → <b>«Добавить»</b>.</>};
+  if(firefox&&android) return {key:"firefox-android",title:"Поставь «Ритм» на домашний экран",
+    steps:<>Меню <b>⋮</b> справа от адресной строки → <b>«Установить»</b> (в старых версиях — <b>«Добавить на главный экран»</b>).</>};
+  if(android) return {key:"android",title:"Поставь «Ритм» на домашний экран",
+    steps:<>Меню <b>⋮</b> браузера → <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>.</>};
+  if(firefox) return {key:"firefox-desktop",title:"Firefox не умеет устанавливать сайты",
+    steps:<>На компьютере приложение ставится из <b>Chrome</b>, <b>Edge</b> или <b>Opera</b>: значок установки в адресной строке. В Firefox Ритм работает как обычная вкладка — можно просто добавить в закладки.</>};
+  return {key:"desktop",title:"Поставь «Ритм» отдельным приложением",
+    steps:<>Значок установки в правой части адресной строки, либо меню браузера → <b>«Установить приложение»</b>.</>};
+}
+
+
+/**
+ * Раздел «Установить приложение» в профиле. В отличие от подсказки сверху,
+ * он не прячется навсегда: если системного окна браузер не даёт, показываем
+ * инструкцию под его меню.
+ */
+function InstallSection() {
+  const [installed,setInstalled]=useState(false);
+  const [way,setWay]=useState<InstallWay|null>(null);
+  const [promptEvent,setPromptEvent]=useState<InstallPromptEvent|null>(null);
+  const [note,setNote]=useState("");
+  useEffect(()=>{
+    const standalone=window.matchMedia("(display-mode: standalone)").matches
+      ||window.matchMedia("(display-mode: minimal-ui)").matches
+      ||(window.navigator as Navigator&{standalone?:boolean}).standalone===true;
+    queueMicrotask(()=>{setInstalled(standalone);setWay(installWay());});
+    const capture=(event:Event)=>{event.preventDefault();setPromptEvent(event as InstallPromptEvent);};
+    const done=()=>{setInstalled(true);setPromptEvent(null);};
+    window.addEventListener("beforeinstallprompt",capture);
+    window.addEventListener("appinstalled",done);
+    return()=>{window.removeEventListener("beforeinstallprompt",capture);window.removeEventListener("appinstalled",done);};
+  },[]);
+  async function install(){
+    if(!promptEvent)return;
+    await promptEvent.prompt();
+    const choice=await promptEvent.userChoice;
+    setPromptEvent(null);
+    setNote(choice.outcome==="accepted"?"Готово — ярлык на главном экране ✓":"Установку отменили.");
+    setTimeout(()=>setNote(""),2600);
+  }
+  if(installed) return <p className="install-note">Ритм уже установлен и открыт как приложение.</p>;
+  return <div className="install-section">
+    {promptEvent
+      ? <><p className="install-note">Браузер поставит Ритм одним нажатием: ярлык на главном экране, запуск без адресной строки.</p>
+          <button className="btn-primary" onClick={()=>void install()}>Установить приложение</button></>
+      : way&&<><p className="install-note"><b>{way.title}.</b> {way.steps}</p></>}
+    {note&&<small className="health-status">{note}</small>}
+  </div>;
+}
+
 function InstallHint() {
-  const [mode,setMode]=useState<"off"|"prompt"|"ios">("off");
+  const [mode,setMode]=useState<"off"|"prompt"|"manual">("off");
+  const [way,setWay]=useState<InstallWay|null>(null);
   const [promptEvent,setPromptEvent]=useState<InstallPromptEvent|null>(null);
   const [note,setNote]=useState("");
   useEffect(()=>{
@@ -570,8 +640,21 @@ function InstallHint() {
     // Установили — подсказка больше не нужна ни в этой вкладке, ни в следующей.
     const installed=()=>{localStorage.setItem("ritm-install-hint","off");setMode("off");};
     window.addEventListener("appinstalled",installed);
-    if(/iPad|iPhone|iPod/.test(navigator.userAgent)) queueMicrotask(()=>setMode(current=>current==="off"?"ios":current));
-    return()=>{window.removeEventListener("beforeinstallprompt",capture);window.removeEventListener("appinstalled",installed);};
+    // Chromium присылает событие не мгновенно. Ждём его, и только если оно
+    // так и не пришло, показываем ручную инструкцию — иначе подсказка
+    // успела бы моргнуть текстом про меню и смениться на кнопку.
+    const fallback=window.setTimeout(()=>{
+      setMode(current=>{
+        if(current!=="off")return current;
+        setWay(installWay());
+        return "manual";
+      });
+    },1400);
+    return()=>{
+      window.clearTimeout(fallback);
+      window.removeEventListener("beforeinstallprompt",capture);
+      window.removeEventListener("appinstalled",installed);
+    };
   },[]);
   function hide(){localStorage.setItem("ritm-install-hint","off");setMode("off");}
   async function install(){
@@ -589,7 +672,12 @@ function InstallHint() {
     <button className="install-go" onClick={()=>void install()}>Установить</button>
     <button onClick={hide} aria-label="Скрыть подсказку">×</button>
   </div>;
-  return <div className="install-hint pop-in"><span aria-hidden>📲</span><p><b>Поставь «Ритм» на домашний экран.</b> Откроется как обычное приложение, без адресной строки: кнопка «Поделиться» внизу Safari → «На экран „Домой“».</p><button onClick={hide} aria-label="Скрыть подсказку">×</button></div>;
+  if(!way)return null;
+  return <div className="install-hint pop-in">
+    <span aria-hidden>📲</span>
+    <p><b>{way.title}.</b> {way.steps}</p>
+    <button onClick={hide} aria-label="Скрыть подсказку">×</button>
+  </div>;
 }
 
 function TimezoneRow() {
@@ -777,6 +865,7 @@ function Profile({user,avatar,streak,onOpenMaker,onOpenOnboarding}:{user:{name:s
       <details className="profile-group" name="profile-settings"><summary><span>🎯</span><div><b>Цель и дневная норма</b><small>Снизить, держать или набрать вес</small></div><i>›</i></summary><div className="profile-group-content"><GoalRow/><button className="recalculate" onClick={onOpenOnboarding}>Пройти полный расчёт заново</button></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📐</span><div><b>Тело и расчёты</b><small>ИМТ, цель и расход энергии</small></div><i>›</i></summary><div className="profile-group-content"><BodyCard embedded/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>📲</span><div><b>Установить приложение</b><small>Ярлык на главном экране, запуск без адресной строки</small></div><i>›</i></summary><div className="profile-group-content"><InstallSection/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{privacyError?"Не сохранилось":saved?"Сохранено ✓":"Что видят другие люди"}</small></div><i>›</i></summary><div className="profile-group-content settings"><h4 className="privacy-section-title">Для друзей</h4><Toggle label="Показывать мой вес" value={settings.shareWeight} onClick={()=>toggle("shareWeight")}/><Toggle label="Показывать съеденные калории за день" value={settings.shareCalories} onClick={()=>toggle("shareCalories")}/><Toggle label="Показывать, что я ем" value={settings.shareFood} onClick={()=>toggle("shareFood")}/><Toggle label="Показывать шаги за день" value={settings.shareSteps} onClick={()=>toggle("shareSteps")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><h4 className="privacy-section-title public">Для всех в общем рейтинге</h4><Toggle label="Показывать серию дней" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><p className="privacy-note">Вес, калории, еду и шаги видят только подтверждённые друзья — и только те данные, которые ты включишь.</p></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
     </div>
