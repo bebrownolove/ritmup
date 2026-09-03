@@ -853,19 +853,21 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
     </ol></>}
     <p className="setup-note">Шаги считает сам iPhone. Активную энергию точнее всего заполняют Apple Watch.</p>
     </>:<>
-    <p className="muted health-explain">У Android нет своих Shortcuts, поэтому мост держит стороннее бесплатное приложение с открытым кодом — <b>HC Webhook</b>. Оно читает Health Connect, куда Samsung Health и Google Fit сами складывают шаги, калории, тренировки и вес.</p>
+    <p className="muted health-explain">У Android нет своих Shortcuts, поэтому мост держит стороннее приложение с открытым кодом — <b>HC Webhook</b>. Оно читает Health Connect, куда Samsung Health и Google Fit сами складывают шаги, калории, тренировки и вес.</p>
     <p className="setup-warn">Сначала в самом Samsung Health: <b>Настройки</b> → <b>Health Connect</b> (или «Синхронизация и общий доступ») → включи выгрузку шагов, калорий, тренировок и веса. Без этого шага в Health Connect будет пусто, и присылать станет нечего.</p>
-    <a className="shortcut-cta" href="https://play.google.com/store/apps/details?id=com.hcwebhook.app" target="_blank" rel="noreferrer"><span>↗</span> Открыть HC Webhook в Google Play</a>
+    <a className="shortcut-cta" href="https://github.com/mcnaveen/health-connect-webhook/releases/latest" target="_blank" rel="noreferrer"><span>↗</span> Скачать HC Webhook бесплатно (GitHub)</a>
+    <p className="setup-note">Это открывает страницу релиза — на ней ищи файл <code>app-foss-release.apk</code> и скачивай его, это и есть бесплатная сборка. В Google Play то же приложение продаётся за деньги (разовая покупка, без подписки) — если не хочешь ставить файл вручную, можно купить его там вместо этого шага.</p>
     <div className="setup-flow">
-      <div><span>1</span><p><b>Разреши доступ</b><small>Health Connect → шаги, калории, тренировки, вес</small></p></div>
-      <div><span>2</span><p><b>Добавь вебхук</b><small>Адрес Android ниже, заголовок Authorization с ключом</small></p></div>
-      <div><span>3</span><p><b>Запусти синхронизацию</b><small>Кнопкой в приложении — один раз, чтобы проверить</small></p></div>
+      <div><span>1</span><p><b>Установи APK</b><small>Скачай файл и разреши установку «из неизвестных источников»</small></p></div>
+      <div><span>2</span><p><b>Разреши доступ</b><small>Health Connect → шаги, калории, тренировки, вес</small></p></div>
+      <div><span>3</span><p><b>Добавь вебхук</b><small>Адрес Android ниже, заголовок Authorization с ключом</small></p></div>
     </div>
     <div className="schedule-card"><span>⏱️</span><div><b>Расписание фоновой отправки</b><p>В настройках вебхука выбери период (например, каждые 2–4 часа) или фиксированные часы.</p><div className="time-chips"><i>08:00</i><i>12:00</i><i>16:00</i><i>20:00</i><i>23:50</i></div></div></div>
     <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть":"Показать инструкцию по шагам"}</button>
     {open&&<ol className="setup-steps">
-      <li>Установи <b>HC Webhook</b> из Google Play (кнопка выше) и открой его.</li>
-      <li>Разреши доступ к <b>Health Connect</b> для типов <b>Steps</b>, <b>Active calories</b>, <b>Exercise</b> и <b>Weight</b> — остальные типы можно не включать, они Ритму не нужны.</li>
+      <li>Открой ссылку выше на телефоне, на странице релиза найди файл <b>app-foss-release.apk</b> и скачай его.</li>
+      <li>При установке Android спросит про источник — разреши установку из приложения, через которое скачивал (Chrome или Файлы). Это разовое разрешение только для него.</li>
+      <li>Открой установленный HC Webhook и разреши доступ к <b>Health Connect</b> для типов <b>Steps</b>, <b>Active calories</b>, <b>Exercise</b> и <b>Weight</b> — остальные типы можно не включать, они Ритму не нужны.</li>
       <li>В настройках вебхука нажми добавить URL. Вставь <b>Android-адрес</b> из поля ниже, метод — <b>POST</b> (стоит по умолчанию).</li>
       <li>Добавь заголовок <b>Authorization</b> и вставь туда <b>личный ключ</b> целиком, включая слово <code>Bearer</code>.</li>
       <li>Включи расписание — период каждые несколько часов или фиксированные точки в течение дня — и запусти синхронизацию один раз кнопкой в приложении.</li>
