@@ -814,14 +814,23 @@ function GoalRow() {
 function HealthSetup({embedded=false}:{embedded?:boolean}) {
   const shortcutUrl=process.env.NEXT_PUBLIC_HEALTH_SHORTCUT_URL;
   const [token,setToken]=useState<HealthToken|null>(null); const [open,setOpen]=useState(false); const [note,setNote]=useState("");
+  // На Android свой мост — Apple Shortcuts там нет. Открываем вкладку под телефон,
+  // с которого зашли; дальше можно переключить руками.
+  const [platform,setPlatform]=useState<"ios"|"android">(()=>
+    typeof navigator!=="undefined"&&/Android/.test(navigator.userAgent)?"android":"ios");
   useEffect(()=>{jsonFetch<HealthToken>("/api/health-token").then(setToken).catch(()=>{});},[]);
-  const endpoint=`${typeof window==="undefined"?"":window.location.origin}/api/health-sync`;
+  const origin=typeof window==="undefined"?"":window.location.origin;
+  const endpoint=`${origin}/api/health-sync`;
+  const connectEndpoint=`${origin}/api/health-connect-sync`;
   async function copy(text:string,label:string){try{await navigator.clipboard.writeText(text);setNote(`${label} скопирован`);}catch{setNote("Не вышло скопировать — выдели и скопируй вручную");}setTimeout(()=>setNote(""),1600);}
-  async function rotate(){if(!window.confirm("Старый ключ сразу перестанет работать, команду на iPhone придётся поправить. Перевыпустить?"))return;setToken(await jsonFetch<HealthToken>("/api/health-token",{method:"POST"}));setNote("Новый ключ готов");setTimeout(()=>setNote(""),1600);}
+  async function rotate(){if(!window.confirm("Старый ключ сразу перестанет работать, команду или приложение на телефоне придётся поправить. Перевыпустить?"))return;setToken(await jsonFetch<HealthToken>("/api/health-token",{method:"POST"}));setNote("Новый ключ готов");setTimeout(()=>setNote(""),1600);}
   return <div className={`${embedded?"health-setup embedded":"list-card health-setup"}`}>
-    {!embedded&&<h3>Apple Health {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>}
-    <div className={`health-connect-state ${token?.lastUsedAt?"connected":""}`}><span>{token?.lastUsedAt?"✓":"1"}</span><div><b>{token?.lastUsedAt?"Связь работает":"Подключение займёт пару минут"}</b><small>{token?.lastUsedAt?`Последняя отправка ${new Date(token.lastUsedAt).toLocaleDateString("ru",{day:"numeric",month:"short"})}`:"Нужна бесплатная команда на iPhone"}</small></div></div>
+    {!embedded&&<h3>Активность и вес {token?.lastUsedAt&&<small>Работает ✓</small>}</h3>}
+    <div className={`health-connect-state ${token?.lastUsedAt?"connected":""}`}><span>{token?.lastUsedAt?"✓":"1"}</span><div><b>{token?.lastUsedAt?"Связь работает":"Подключение займёт пару минут"}</b><small>{token?.lastUsedAt?`Последняя отправка ${new Date(token.lastUsedAt).toLocaleDateString("ru",{day:"numeric",month:"short"})}`:platform==="ios"?"Нужна бесплатная команда на iPhone":"Нужно бесплатное приложение на телефоне"}</small></div></div>
     <TimezoneRow/>
+    <div className="segmented platform-switch"><button className={platform==="ios"?"active":""} onClick={()=>setPlatform("ios")}>iPhone</button><button className={platform==="android"?"active":""} onClick={()=>setPlatform("android")}>Android</button></div>
+
+    {platform==="ios"?<>
     <p className="muted health-explain">Ритм — PWA, поэтому данные передаёт команда на iPhone. После настройки она работает сама несколько раз в день.</p>
     {shortcutUrl
       ? <><a className="shortcut-cta" href={shortcutUrl} target="_blank" rel="noreferrer"><span>↗</span> Добавить команду на iPhone</a>
@@ -843,7 +852,29 @@ function HealthSetup({embedded=false}:{embedded?:boolean}) {
       <li>Нажми <b>▶</b>. Сервер должен ответить <code>{"{"}&quot;ok&quot;:true{"}"}</code> с твоими числами. Затем создай автоматизации на <b>08:00, 12:00, 16:00, 20:00 и 23:50</b> с немедленным запуском.</li>
     </ol></>}
     <p className="setup-note">Шаги считает сам iPhone. Активную энергию точнее всего заполняют Apple Watch.</p>
-    <div className="health-credentials"><div className="token-row"><div><small>АДРЕС</small><code>{endpoint}</code></div><button onClick={()=>copy(endpoint,"Адрес")}>Копировать</button></div>
+    </>:<>
+    <p className="muted health-explain">У Android нет своих Shortcuts, поэтому мост держит стороннее бесплатное приложение с открытым кодом — <b>HC Webhook</b>. Оно читает Health Connect, куда Samsung Health и Google Fit сами складывают шаги, калории, тренировки и вес.</p>
+    <p className="setup-warn">Сначала в самом Samsung Health: <b>Настройки</b> → <b>Health Connect</b> (или «Синхронизация и общий доступ») → включи выгрузку шагов, калорий, тренировок и веса. Без этого шага в Health Connect будет пусто, и присылать станет нечего.</p>
+    <a className="shortcut-cta" href="https://play.google.com/store/apps/details?id=com.hcwebhook.app" target="_blank" rel="noreferrer"><span>↗</span> Открыть HC Webhook в Google Play</a>
+    <div className="setup-flow">
+      <div><span>1</span><p><b>Разреши доступ</b><small>Health Connect → шаги, калории, тренировки, вес</small></p></div>
+      <div><span>2</span><p><b>Добавь вебхук</b><small>Адрес Android ниже, заголовок Authorization с ключом</small></p></div>
+      <div><span>3</span><p><b>Запусти синхронизацию</b><small>Кнопкой в приложении — один раз, чтобы проверить</small></p></div>
+    </div>
+    <div className="schedule-card"><span>⏱️</span><div><b>Расписание фоновой отправки</b><p>В настройках вебхука выбери период (например, каждые 2–4 часа) или фиксированные часы.</p><div className="time-chips"><i>08:00</i><i>12:00</i><i>16:00</i><i>20:00</i><i>23:50</i></div></div></div>
+    <button className="link-row" onClick={()=>setOpen(v=>!v)}>{open?"Свернуть":"Показать инструкцию по шагам"}</button>
+    {open&&<ol className="setup-steps">
+      <li>Установи <b>HC Webhook</b> из Google Play (кнопка выше) и открой его.</li>
+      <li>Разреши доступ к <b>Health Connect</b> для типов <b>Steps</b>, <b>Active calories</b>, <b>Exercise</b> и <b>Weight</b> — остальные типы можно не включать, они Ритму не нужны.</li>
+      <li>В настройках вебхука нажми добавить URL. Вставь <b>Android-адрес</b> из поля ниже, метод — <b>POST</b> (стоит по умолчанию).</li>
+      <li>Добавь заголовок <b>Authorization</b> и вставь туда <b>личный ключ</b> целиком, включая слово <code>Bearer</code>.</li>
+      <li>Включи расписание — период каждые несколько часов или фиксированные точки в течение дня — и запусти синхронизацию один раз кнопкой в приложении.</li>
+      <li>Сервер должен ответить <code>{"{"}&quot;ok&quot;:true{"}"}</code>, а здесь наверху появится «Связь работает».</li>
+    </ol>}
+    <p className="setup-note">Шаги и калории считает телефон или часы Galaxy Watch, если они подключены к Samsung Health. HC Webhook — сторонний проект, не часть Ритма; ключ разрешает только присылать твои дневные числа.</p>
+    </>}
+
+    <div className="health-credentials"><div className="token-row"><div><small>{platform==="ios"?"АДРЕС":"АДРЕС ДЛЯ ANDROID"}</small><code>{platform==="ios"?endpoint:connectEndpoint}</code></div><button onClick={()=>copy(platform==="ios"?endpoint:connectEndpoint,"Адрес")}>Копировать</button></div>
     <div className="token-row"><div><small>ЛИЧНЫЙ КЛЮЧ</small><code>{token?`Bearer ${token.token}`:"…"}</code></div><button disabled={!token} onClick={()=>token&&copy(`Bearer ${token.token}`,"Ключ")}>Копировать</button></div></div>
     <details className="health-security"><summary>Безопасность ключа</summary><p>Ключ разрешает только отправлять твои дневные числа. Не пересылай его другим.</p><button className="danger" onClick={rotate}>Перевыпустить ключ</button></details>
     {note&&<small className="health-status">{note}</small>}
@@ -916,7 +947,7 @@ function Profile({user,avatar,streak,onOpenMaker,onOpenOnboarding}:{user:{name:s
       <details className="profile-group" name="profile-settings"><summary><span>🎨</span><div><b>Оформление</b><small>Светлая или тёмная тема</small></div><i>›</i></summary><div className="profile-group-content"><ThemeControl/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>📲</span><div><b>Установить приложение</b><small>Ярлык на главном экране, запуск без адресной строки</small></div><i>›</i></summary><div className="profile-group-content"><InstallSection/></div></details>
       <details className="profile-group" name="profile-settings"><summary><span>🔒</span><div><b>Приватность</b><small>{privacyError?"Не сохранилось":saved?"Сохранено ✓":"Что видят другие люди"}</small></div><i>›</i></summary><div className="profile-group-content settings"><h4 className="privacy-section-title">Для друзей</h4><Toggle label="Показывать мой вес" value={settings.shareWeight} onClick={()=>toggle("shareWeight")}/><Toggle label="Показывать съеденные калории за день" value={settings.shareCalories} onClick={()=>toggle("shareCalories")}/><Toggle label="Показывать, что я ем" value={settings.shareFood} onClick={()=>toggle("shareFood")}/><Toggle label="Показывать шаги за день" value={settings.shareSteps} onClick={()=>toggle("shareSteps")}/><Toggle label="Показывать тренировки" value={settings.shareWorkouts} onClick={()=>toggle("shareWorkouts")}/><h4 className="privacy-section-title public">Для всех в общем рейтинге</h4><Toggle label="Показывать серию дней" value={settings.shareStreak} onClick={()=>toggle("shareStreak")}/><Toggle label="Показывать выполнение цели" value={settings.shareGoalHits} onClick={()=>toggle("shareGoalHits")}/><Toggle label="Меня можно найти по нику" value={settings.isDiscoverable} onClick={()=>toggle("isDiscoverable")}/><p className="privacy-note">Вес, калории, еду и шаги видят только подтверждённые друзья — и только те данные, которые ты включишь.</p></div></details>
-      <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Apple Health</b><small>Автоматизация через iPhone</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
+      <details className="profile-group" name="profile-settings"><summary><span>❤️</span><div><b>Активность и вес</b><small>Apple Health, Samsung Health и другие</small></div><i>›</i></summary><div className="profile-group-content"><HealthSetup embedded/></div></details>
     </div>
     <button className="danger" onClick={()=>authClient.signOut()}>Выйти из аккаунта</button>
   </section>;
