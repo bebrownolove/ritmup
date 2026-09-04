@@ -173,7 +173,8 @@ function FoodAiEstimator({onAdd,onClose}:{onAdd:(title:string,calories:number,ma
     <div className="ai-heading"><div><span>✨</span><h4>Оценить с Gemini</h4></div><button type="button" onClick={onClose} aria-label="Закрыть">×</button></div>
     <label className="ai-field"><b>Опиши порцию</b><textarea value={description} onChange={event=>setDescription(event.target.value)} maxLength={800} rows={4} placeholder="Например: около 250 г домашнего плова с курицей, масла примерно столовая ложка."/><small>Чем точнее вес, объём, состав и бренд — тем точнее оценка.</small></label>
     <label className={`ai-photo${preview?" has-photo":""}`}>
-      <input type="file" accept="image/*" capture="environment" onChange={event=>choosePhoto(event.target.files?.[0]??null)}/>
+      {/* Без capture: браузер сам предложит выбор «Камера» или «Галерея», а не запускает камеру напрямую. */}
+      <input type="file" accept="image/*" onChange={event=>choosePhoto(event.target.files?.[0]??null)}/>
       {/* blob: — одноразовый локальный предпросмотр, оптимизация Next Image здесь неприменима. */}
       {preview?<img src={preview} alt="Выбранная еда"/>:<span>📷</span> /* eslint-disable-line @next/next/no-img-element */}
       <b>{preview?"Сменить фотографию":"Сделать или выбрать фото"}</b>
